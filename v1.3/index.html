@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Madrid Rental - Dashboard 2026</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <div id="setup-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>📍 Configuración Inicial</h3>
+            <form id="setup-form">
+                <input type="text" name="direccion" placeholder="Dirección del piso" required>
+                <input type="text" name="cp" placeholder="Código Postal" required>
+                <button type="submit" class="btn-primary">Configurar</button>
+            </form>
+        </div>
+    </div>
+
+    <header class="main-header">
+        <div class="header-info">
+            <h1>Madrid <span class="text-light">Rental</span></h1>
+            <small id="display-address"></small>
+        </div>
+        <nav id="main-nav">
+            <button class="nav-btn active" data-target="view-dashboard">Resumen</button>
+            <button class="nav-btn" data-target="view-bookings">Reservas</button>
+            <button class="nav-btn" data-target="view-expenses">Gastos</button>
+            <button class="nav-btn" data-target="view-analysis">Análisis</button>
+            <button class="nav-btn" data-target="view-bank">Bancos</button>
+            <button class="nav-btn" data-target="view-market">Mercado</button>
+        </nav>
+    </header>
+
+    <main id="app-container">
+        
+        <section id="view-dashboard" class="app-view active">
+            <div class="section-header">
+                <h2>Dashboard <span id="current-filter-label">2026</span></h2>
+                <select id="filter-year-main">
+                    <option value="2026" selected>Año 2026</option>
+                    <option value="2025">Año 2025</option>
+                </select>
+            </div>
+            
+            <div class="card-grid">
+                <div class="card"><h3>Bruto</h3><p id="dash-bruto">0€</p></div>
+                <div class="card"><h3>Gestión</h3><p id="dash-gestion" class="text-danger">0€</p></div>
+                <div class="card"><h3>Propiedad</h3><p id="dash-propiedad" class="text-danger">0€</p></div>
+                <div class="card"><h3>Neto</h3><p id="dash-neto" class="text-success">0€</p></div>
+            </div>
+            
+            <div class="chart-container">
+                <canvas id="mainTimelineChart"></canvas>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-box">Ocupación Mes Activo: <b id="occ-month">0%</b></div>
+                <div class="stat-box">Ocupación Total <span id="occ-year-label">2026</span>: <b id="occ-year">0%</b></div>
+            </div>
+            <button id="clear-data" class="btn-danger-outline">Resetear Memoria</button>
+        </section>
+
+        <section id="view-bookings" class="app-view">
+            <h2>Nueva Reserva</h2>
+            <form id="form-booking" class="data-form">
+                <div class="form-row-3">
+                    <div class="field">
+                        <label>Canal</label>
+                        <select name="platform">
+                            <option value="Booking" selected>Booking</option>
+                            <option value="Airbnb">Airbnb</option>
+                            <option value="Directo">Directo</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Reserva #</label>
+                        <input type="text" name="booking_ref" placeholder="0001" required>
+                    </div>
+                    <div class="field">
+                        <label>Origen</label>
+                        <select name="origin" id="origin-select"></select>
+                    </div>
+                </div>
+
+                <div class="form-row-3">
+                    <div class="field"><label>Fecha Reserva</label><input type="date" name="booking_date" required></div>
+                    <div class="field"><label>Check-in</label><input type="date" name="checkin" required></div>
+                    <div class="field"><label>Check-out</label><input type="date" name="checkout" required></div>
+                </div>
+
+                <div class="form-row-3">
+                    <div class="field"><label>Pax</label><select name="pax"><option value="1">1</option><option value="2">2</option></select></div>
+                    <div class="field"><label>Bruto (€)</label><input type="number" name="bruto" step="0.01" required></div>
+                    <div class="field"><label>Fee Canal (€)</label><input type="number" name="fee_canal" step="0.01"></div>
+                </div>
+
+                <div class="form-row-2">
+                    <div class="field"><label>Comisión Banco (€)</label><input type="number" name="fee_banco" step="0.01"></div>
+                    <div class="field"><label>Fee THL (€)</label><input type="number" name="fee_thl" step="0.01"></div>
+                </div>
+                <div class="field"><label>Limpieza (€)</label><input type="number" name="limpieza" step="0.01"></div>
+
+                <button type="submit" class="btn-primary">Registrar Reserva</button>
+            </form>
+
+            <div class="list-container mt-2">
+                <h3>Historial de Reservas</h3>
+                <div class="table-responsive">
+                    <table class="data-table small">
+                        <thead>
+                            <tr>
+                                <th>Ref/Canal</th>
+                                <th>Origen</th>
+                                <th>In/Out (Noches)</th>
+                                <th>Bruto</th>
+                                <th>Neto</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="list-bookings-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="view-expenses" class="app-view">
+            <h2>Gastos de Propiedad</h2>
+            <form id="form-expense" class="data-form">
+                <div class="form-row-2">
+                    <input type="date" name="date" required>
+                    <select name="category" required>
+                        <option value="Luz">Electricidad</option>
+                        <option value="Gas">Gas</option>
+                        <option value="Internet">Internet</option>
+                        <option value="Comunidad">Comunidad</option>
+                        <option value="IBI">IBI</option>
+                        <option value="Hacienda">Hacienda / Tasas</option>
+                        <option value="Seguro">Seguro</option>
+                    </select>
+                </div>
+                <textarea name="observations" placeholder="Observaciones de la factura..."></textarea>
+                <input type="number" name="amount" placeholder="Monto €" step="0.01" required>
+                <button type="submit" class="btn-primary">Añadir Gasto</button>
+            </form>
+            <div class="list-container"><ul id="list-expenses"></ul></div>
+        </section>
+
+        <section id="view-analysis" class="app-view">
+            <h2>📈 Análisis de Negocio</h2>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Mes</th>
+                            <th>Noches</th>
+                            <th>Occ %</th>
+                            <th>Bruto</th>
+                            <th>Neto</th>
+                            <th>ADR</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stats-table-body"></tbody>
+                </table>
+            </div>
+
+            <div class="analysis-grid mt-2">
+                <div class="analysis-card">
+                    <h4>Gastos por Canal / Servicio</h4>
+                    <ul id="expenses-breakdown"></ul>
+                </div>
+                <div class="analysis-card">
+                    <h4>Origen de Huéspedes</h4>
+                    <ul id="origin-list"></ul>
+                </div>
+            </div>
+        </section>
+
+        <section id="view-bank" class="app-view">
+            <h2>🏦 Consolidación Bancaria</h2>
+            <div id="bank-list"></div>
+        </section>
+
+        <section id="view-market" class="app-view">
+            <h2>🗺️ Comparativa de Mercado (IA & Scraping)</h2>
+            <p class="mb-1">Basado en tu ubicación: <b id="market-location-label">Madrid</b></p>
+            
+            <div class="market-grid">
+                <div class="market-card">
+                    <h4>Alquiler Turístico</h4>
+                    <span class="price-tag" id="price-tourist">--€/noche</span>
+                    <small>Promedio zona (Pisos similares)</small>
+                </div>
+                <div class="market-card">
+                    <h4>Alquiler Temporal</h4>
+                    <span class="price-tag" id="price-seasonal">--€/mes</span>
+                    <small>Media 3-11 meses</small>
+                </div>
+                <div class="market-card">
+                    <h4>Alquiler Permanente</h4>
+                    <span class="price-tag" id="price-permanent">--€/mes</span>
+                    <small>Contratos larga duración</small>
+                </div>
+            </div>
+
+            <div class="list-container mt-2">
+                <h3>Competencia Cercana Detectada</h3>
+                <div id="ai-market-insights">
+                    </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script src="app.js" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+:root {
+    --primary: #0f172a;
+    --accent: #0ea5e9;
+    --success: #10b981;
+    --danger: #ef4444;
+    --bg: #f1f5f9;
+    --white: #ffffff;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--primary); font-size: 14px; }
+
+.main-header { background: var(--primary); color: white; padding: 1rem; position: sticky; top: 0; z-index: 50; }
+#main-nav { display: flex; gap: 5px; overflow-x: auto; padding: 10px 0; scrollbar-width: none; }
+.nav-btn { background: #1e293b; border: none; color: #94a3b8; padding: 8px 15px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.nav-btn.active { background: var(--accent); color: white; }
+
+main { padding: 1rem; max-width: 900px; margin: 0 auto; }
+.app-view { display: none; }
+.app-view.active { display: block; animation: fadeIn 0.2s; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.card-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px; }
+@media (min-width: 600px) { .card-grid { grid-template-columns: repeat(4, 1fr); } }
+
+.card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border-bottom: 3px solid var(--accent); }
+.card h3 { font-size: 0.65rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+.card p { font-size: 1.5rem; font-weight: 800; margin-top: 5px; }
+
+.chart-container { background: white; padding: 1.5rem; border-radius: 12px; margin-bottom: 15px; height: 320px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+
+.form-row-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }
+.form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 0.75rem; font-weight: bold; color: #475569; }
+
+input, select, textarea { padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.9rem; }
+.btn-primary { background: var(--accent); color: white; border: none; padding: 14px; border-radius: 8px; width: 100%; font-weight: bold; cursor: pointer; }
+
+.table-responsive { width: 100%; overflow-x: auto; background: white; border-radius: 12px; }
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th, .data-table td { padding: 12px; text-align: left; border-bottom: 1px solid #f1f5f9; }
+.data-table.small { font-size: 0.8rem; }
+
+/* Mercado */
+.market-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+.market-card { background: white; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+.price-tag { display: block; font-size: 1.8rem; font-weight: bold; color: var(--accent); margin: 10px 0; }
+
+.bank-card { background: white; padding: 15px; border-radius: 12px; margin-bottom: 10px; border-left: 5px solid var(--accent); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+
+.mt-2 { margin-top: 2rem; }
+.text-success { color: var(--success); }
+.text-danger { color: var(--danger); }
+.mb-1 { margin-bottom: 1rem; }

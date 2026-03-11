@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Madrid Rental - Gestión Multi-Activo</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <div id="setup-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>📍 Identificación del Activo</h3>
+            <p>Introduce la dirección para acceder a su base de datos específica.</p>
+            <form id="setup-form">
+                <input type="text" name="direccion" id="input-dir" placeholder="Dirección (Ej: Calle Mayor 1)" required>
+                <input type="text" name="cp" id="input-cp" placeholder="Código Postal" required>
+                <button type="submit" class="btn-primary">Acceder al Activo</button>
+                <button type="button" id="close-setup" class="btn-secondary hidden">Cancelar</button>
+            </form>
+        </div>
+    </div>
+
+    <header class="main-header">
+        <div class="header-info">
+            <h1>Madrid <span class="text-light">Rental</span></h1>
+            <div class="address-box" id="edit-address-trigger" style="cursor: pointer;">
+                <small><i class="fa fa-map-marker-alt text-accent"></i> <span id="display-address">Seleccionar Piso...</span></small>
+                <div class="global-filter">
+                    <input type="date" id="global-start">
+                    <span>a</span>
+                    <input type="date" id="global-end">
+                </div>
+            </div>
+        </div>
+        <nav id="main-nav">
+            <button class="nav-btn active" data-target="view-dashboard">Resumen</button>
+            <button class="nav-btn" data-target="view-bookings">Reservas</button>
+            <button class="nav-btn" data-target="view-expenses">Gastos</button>
+            <button class="nav-btn" data-target="view-analysis">Análisis</button>
+            <button class="nav-btn" data-target="view-bank">Bancos</button>
+            <button class="nav-btn" data-target="view-market">Mercado</button>
+        </nav>
+    </header>
+
+    <main id="app-container">
+        <section id="view-dashboard" class="app-view active">
+            <div class="card-grid">
+                <div class="card card-bruto"><h3>Ingresos Brutos</h3><p id="dash-bruto">0.00€</p></div>
+                <div class="card card-gestion"><h3>Gastos Gestión</h3><p id="dash-gestion">0.00€</p></div>
+                <div class="card card-propiedad"><h3>Gastos Propiedad</h3><p id="dash-propiedad">0.00€</p></div>
+                <div class="card card-neto"><h3>Beneficio Neto</h3><p id="dash-neto">0.00€</p></div>
+            </div>
+            <div class="chart-container"><canvas id="mainTimelineChart"></canvas></div>
+            <div class="stats-grid">
+                <div class="stat-box">Ocupación: <b id="occ-period">0%</b></div>
+                <div class="stat-box">Noches: <b id="nights-period">0</b></div>
+            </div>
+        </section>
+
+        <section id="view-bookings" class="app-view">
+            <h2 id="booking-form-title">Nueva Reserva</h2>
+            <form id="form-booking" class="data-form">
+                <input type="hidden" name="booking_id" id="edit-booking-id">
+                <div class="form-row-3">
+                    <div class="field"><label>Canal</label><select name="platform"><option value="Booking">Booking</option><option value="Airbnb">Airbnb</option><option value="Directo">Directo</option></select></div>
+                    <div class="field"><label>Reserva #</label><input type="text" name="booking_ref" required></div>
+                    <div class="field"><label>Origen</label><select name="origin" id="origin-select"></select></div>
+                </div>
+                <div class="form-row-3">
+                    <div class="field"><label>Fecha Reserva</label><input type="date" name="booking_date" class="set-today" required></div>
+                    <div class="field"><label>Check-in</label><input type="date" name="checkin" required></div>
+                    <div class="field"><label>Check-out</label><input type="date" name="checkout" required></div>
+                </div>
+                <div class="form-row-2">
+                    <div class="field"><label>Pax</label><select name="pax"><option value="1">1</option><option value="2" selected>2</option></select></div>
+                    <div class="field"><label>Bruto (€)</label><input type="number" name="bruto" step="0.01" required></div>
+                </div>
+                <div class="form-row-3">
+                    <div class="field"><label>Com. Banco</label><input type="number" name="fee_banco" step="0.01" value="0"></div>
+                    <div class="field"><label>Fee THL</label><input type="number" name="fee_thl" step="0.01" value="0"></div>
+                    <div class="field"><label>Limpieza</label><input type="number" name="limpieza" step="0.01" value="0"></div>
+                </div>
+                <button type="submit" class="btn-primary">Guardar Reserva</button>
+            </form>
+            <div class="list-container mt-2">
+                <div class="table-responsive">
+                    <table class="data-table small">
+                        <thead><tr><th>Ref/Canal</th><th>Noches</th><th>Origen</th><th>In/Out</th><th>Bruto</th><th>Neto</th><th>Acciones</th></tr></thead>
+                        <tbody id="list-bookings-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="view-expenses" class="app-view">
+            <h2 id="expense-form-title">Gasto de Propiedad</h2>
+            <form id="form-expense" class="data-form">
+                <input type="hidden" name="expense_id" id="edit-expense-id">
+                <div class="form-row-3">
+                    <div class="field"><label>Fecha</label><input type="date" name="date" class="set-today" required></div>
+                    <div class="field"><label>Tipo</label><select name="category" required><option value="Luz">Luz</option><option value="Gas">Gas</option><option value="Internet">Internet</option><option value="Comunidad">Comunidad</option><option value="IBI">IBI</option><option value="Hacienda">Hacienda</option></select></div>
+                    <div class="field"><label>Monto €</label><input type="number" name="amount" step="0.01" required></div>
+                </div>
+                <div class="field"><label>Observaciones</label><textarea name="observations" rows="2"></textarea></div>
+                <button type="submit" class="btn-primary">Registrar Gasto</button>
+            </form>
+            <div class="list-container mt-2">
+                <div class="table-responsive">
+                    <table class="data-table small">
+                        <thead><tr><th>Fecha</th><th>Categoría</th><th>Obs.</th><th>Monto</th><th>Acciones</th></tr></thead>
+                        <tbody id="list-expenses-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="view-analysis" class="app-view">
+            <h2>📈 Análisis por Período</h2>
+            <div class="table-responsive"><table class="data-table"><thead><tr><th>Mes</th><th>Noches</th><th>Occ %</th><th>Bruto</th><th>Neto</th></tr></thead><tbody id="stats-table-body"></tbody></table></div>
+        </section>
+
+        <section id="view-bank" class="app-view">
+            <h2>🏦 Bancos: Conciliación</h2>
+            <div id="bank-list"></div>
+        </section>
+
+        <section id="view-market" class="app-view">
+            <h2>🗺️ Comparativa de Mercado e IA</h2>
+            <div class="market-status" id="market-status-box">Selecciona un activo para analizar...</div>
+            <div class="market-grid" id="market-cards-container"></div>
+        </section>
+    </main>
+
+    <script src="app.js" type="module"></script>
+    <button id="btn-open-import" class="btn-secondary" style="position:fixed; bottom:20px; right:20px; width:auto; padding:10px 20px; border-radius:50px; z-index:99; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+    <i class="fa fa-upload"></i> Importar Datos Históricos
+</button>
+
+<div id="import-modal" class="modal hidden">
+    <div class="modal-content" style="max-width: 500px;">
+        <h3>📥 Importar Historial (CSV)</h3>
+        <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 15px;">
+            Selecciona tus archivos para cargar los datos en el activo actual: <br>
+            <strong id="import-active-name" class="text-accent"></strong>
+        </p>
+        
+        <div style="display: grid; gap: 15px;">
+            <div class="field">
+                <label>Archivo de Reservas (CAF957 - Reservas)</label>
+                <input type="file" id="csv-reservas" accept=".csv">
+            </div>
+            <div class="field">
+                <label>Archivo de Gastos (CAF957 - Gastos)</label>
+                <input type="file" id="csv-gastos" accept=".csv">
+            </div>
+        </div>
+
+        <div style="margin-top: 20px; display: flex; gap: 10px;">
+            <button id="btn-run-import" class="btn-primary">Procesar Archivos</button>
+            <button id="btn-close-import" class="btn-secondary">Cerrar</button>
+        </div>
+        <div id="import-log" style="margin-top:15px; font-size:0.75rem; max-height:100px; overflow-y:auto; background:#f1f5f9; padding:10px; border-radius:8px;">
+            Esperando archivos...
+        </div>
+    </div>
+</div>
+</body>
+</html>
