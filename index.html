@@ -9,29 +9,59 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Firebase SDK Compat -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
 </head> 
 <body> 
  
     <!-- Login Modal -->
     <div id="login-modal" class="modal">
-        <div class="modal-content">
-            <h3>🔐 Acceso a Keep in Rent</h3>
-            <form id="login-form">
-                <input type="email" name="email" id="login-email" placeholder="Email" required>
-                <input type="password" name="password" id="login-password" placeholder="Contraseña" required>
-                <button type="submit" class="btn-primary" style="width:100%">Iniciar Sesión</button>
-            </form>
+        <div class="modal-content" style="text-align: center;">
+            <h3>🔐 Acceso a Madrid Rental</h3>
+            <p style="margin-bottom: 20px; font-size: 0.9rem; color: #64748b;">Inicia sesión para gestionar tus propiedades</p>
+            <button id="btn-google-login" class="btn-primary" style="width:100%; display: flex; align-items: center; justify-content: center; gap: 10px; background-color: #ffffff; color: #475569; border: 1px solid #cbd5e1;">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" style="width: 20px;">
+                Continuar con Google
+            </button>
         </div>
     </div>
 
     <div id="setup-modal" class="modal hidden" style="display: none;"> 
-        <div class="modal-content"> 
+        <div class="modal-content" style="max-height: 90vh; overflow-y: auto; max-width: 600px;">
             <h3>📍 Registrar Nueva Propiedad</h3> 
             <form id="setup-form"> 
-                <input type="text" name="calle" id="input-calle" placeholder="Calle" required> 
-                <input type="text" name="cp" id="input-cp" placeholder="Código Postal" required> 
-                <input type="text" name="ciudad" id="input-ciudad" placeholder="Ciudad" required> 
-                <input type="text" name="pais" id="input-pais" placeholder="País" required> 
+                <h4 style="margin: 10px 0 5px 0; color: #64748b; font-size: 0.85rem;">Ubicación</h4>
+                <div class="form-row-3" style="margin-bottom: 10px;">
+                    <div class="field"><input type="text" name="calle" id="input-calle" placeholder="Calle" required></div>
+                    <div class="field"><input type="text" name="cp" id="input-cp" placeholder="Código Postal" required></div>
+                    <div class="field"><input type="text" name="ciudad" id="input-ciudad" placeholder="Ciudad" required></div>
+                    <div class="field"><input type="text" name="pais" id="input-pais" placeholder="País" required></div>
+                </div>
+
+                <h4 style="margin: 10px 0 5px 0; color: #64748b; font-size: 0.85rem;">Características Principales</h4>
+                <div class="form-row-3" style="margin-bottom: 10px;">
+                    <div class="field"><label>Superficie (m²)</label><input type="number" name="m2" placeholder="m²"></div>
+                    <div class="field"><label>Habitaciones</label><input type="number" name="habitaciones" placeholder="Ej: 2"></div>
+                    <div class="field"><label>Baños</label><input type="number" name="banos" placeholder="Ej: 1"></div>
+                    <div class="field"><label>Capacidad (Pers.)</label><input type="number" name="capacidad" placeholder="Ej: 4"></div>
+                </div>
+
+                <h4 style="margin: 10px 0 5px 0; color: #64748b; font-size: 0.85rem;">Amenidades</h4>
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px;">
+                    <label style="display: flex; align-items: center; gap: 5px; font-size: 0.85rem;"><input type="checkbox" name="piscina" value="1"> Piscina</label>
+                    <label style="display: flex; align-items: center; gap: 5px; font-size: 0.85rem;"><input type="checkbox" name="cochera" value="1"> Cochera</label>
+                    <label style="display: flex; align-items: center; gap: 5px; font-size: 0.85rem;"><input type="checkbox" name="balcon" value="1"> Balcón / Terraza</label>
+                    <label style="display: flex; align-items: center; gap: 5px; font-size: 0.85rem;"><input type="checkbox" name="ascensor" value="1"> Ascensor</label>
+                </div>
+
+                <h4 style="margin: 10px 0 5px 0; color: #64748b; font-size: 0.85rem;">Atributos Personalizados</h4>
+                <div id="custom-features-container" style="margin-bottom: 15px;"></div>
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <input type="text" id="custom-feature-name" placeholder="Ej: Jacuzzi, Parrilla..." style="flex: 1;">
+                    <button type="button" id="btn-add-feature" class="btn-secondary" style="padding: 10px;">Añadir</button>
+                </div>
+
                 <button type="submit" class="btn-primary" style="width:100%">Guardar Activo</button> 
                 <button type="button" id="close-setup" class="btn-secondary hidden" style="width:100%; margin-top:5px;">Cancelar</button> 
             </form> 
@@ -66,10 +96,17 @@
  
     <header class="main-header"> 
         <div class="header-info"> 
-            <h1>Madrid <span class="text-light">Rental</span></h1> 
-            <div class="address-box" id="edit-address-trigger" style="cursor: pointer;"> 
-                <small><i class="fa fa-map-marker-alt text-accent"></i> <span id="display-address">Piso...</span></small> 
-            </div> 
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <h1>Madrid <span class="text-light">Rental</span></h1>
+                <select id="property-selector" style="background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); padding: 5px; border-radius: 4px;"></select>
+                <button id="btn-add-property" class="btn-secondary" style="padding: 5px 10px; font-size: 0.8rem;"><i class="fa fa-plus"></i></button>
+            </div>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div class="address-box" id="edit-address-trigger">
+                    <small><i class="fa fa-map-marker-alt text-accent"></i> <span id="display-address">Cargando...</span></small>
+                </div>
+                <button id="btn-logout" class="btn-secondary" style="padding: 5px 10px; font-size: 0.8rem;"><i class="fa fa-sign-out-alt"></i> Salir</button>
+            </div>
         </div> 
         <nav id="main-nav"> 
             <button class="nav-btn active" data-target="view-dashboard">Resumen</button> 
