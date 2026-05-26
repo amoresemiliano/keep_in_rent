@@ -1,0 +1,322 @@
+<!DOCTYPE html> 
+<html lang="es"> 
+<head> 
+    <meta charset="UTF-8"> 
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+    <title>Madrid Rental - Dashboard BI Profesional</title> 
+    <link rel="stylesheet" href="style.css"> 
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"> 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> 
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head> 
+<body> 
+ 
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal">
+        <div class="modal-content">
+            <h3>🔐 Acceso a Keep in Rent</h3>
+            <form id="login-form">
+                <input type="email" name="email" id="login-email" placeholder="Email" required>
+                <input type="password" name="password" id="login-password" placeholder="Contraseña" required>
+                <button type="submit" class="btn-primary" style="width:100%">Iniciar Sesión</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="setup-modal" class="modal hidden" style="display: none;"> 
+        <div class="modal-content"> 
+            <h3>📍 Registrar Nueva Propiedad</h3> 
+            <form id="setup-form"> 
+                <input type="text" name="calle" id="input-calle" placeholder="Calle" required> 
+                <input type="text" name="cp" id="input-cp" placeholder="Código Postal" required> 
+                <input type="text" name="ciudad" id="input-ciudad" placeholder="Ciudad" required> 
+                <input type="text" name="pais" id="input-pais" placeholder="País" required> 
+                <button type="submit" class="btn-primary" style="width:100%">Guardar Activo</button> 
+                <button type="button" id="close-setup" class="btn-secondary hidden" style="width:100%; margin-top:5px;">Cancelar</button> 
+            </form> 
+        </div> 
+    </div>
+
+    <div id="import-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>📂 Importar Datos CSV</h3>
+            <p style="margin-bottom: 15px; font-size: 0.9rem; color: #64748b;">Selecciona los archivos CSV (separados por punto y coma) para importar el historial.</p>
+            <form id="import-form">
+                <div class="field" style="margin-bottom:15px;">
+                    <label>Reservas (CSV)</label>
+                    <input type="file" id="file-bookings" accept=".csv">
+                </div>
+                <div class="field" style="margin-bottom:15px;">
+                    <label>Gastos (CSV)</label>
+                    <input type="file" id="file-expenses" accept=".csv">
+                </div>
+                <div class="field" style="margin-bottom:15px;">
+                    <label>Opciones</label>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <input type="checkbox" id="clear-existing" style="width:auto;">
+                        <span style="font-size: 0.85rem;">Borrar datos existentes antes de importar</span>
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary" style="width:100%">Procesar Archivos</button>
+                <button type="button" id="close-import" class="btn-secondary" style="width:100%; margin-top:5px;">Cancelar</button>
+            </form>
+        </div>
+    </div>
+ 
+    <header class="main-header"> 
+        <div class="header-info"> 
+            <h1>Madrid <span class="text-light">Rental</span></h1> 
+            <div class="address-box" id="edit-address-trigger" style="cursor: pointer;"> 
+                <small><i class="fa fa-map-marker-alt text-accent"></i> <span id="display-address">Piso...</span></small> 
+            </div> 
+        </div> 
+        <nav id="main-nav"> 
+            <button class="nav-btn active" data-target="view-dashboard">Resumen</button> 
+            <button class="nav-btn" data-target="view-bookings">Reservas</button> 
+            <button class="nav-btn" data-target="view-expenses">Gastos</button> 
+            <button class="nav-btn" data-target="view-analysis">Análisis</button> 
+            <button class="nav-btn" data-target="view-bank">Bancos</button> 
+            <button class="nav-btn" data-target="view-market">Comparativa</button> 
+        </nav> 
+    </header> 
+ 
+    <main id="app-container"> 
+         
+        <section id="view-dashboard" class="app-view active"> 
+            <div class="card-grid"> 
+                <div class="card card-bruto"><h3>Ingresos Brutos</h3><p id="dash-bruto">0.00€</p></div> 
+                <div class="card card-gestion"><h3>Gastos Gestión</h3><p id="dash-gestion">0.00€</p></div> 
+                <div class="card card-propiedad"><h3>Gastos Propiedad</h3><p id="dash-propiedad">0.00€</p></div> 
+                <div class="card card-neto"><h3>Beneficio Neto</h3><p id="dash-neto">0.00€</p></div> 
+            </div> 
+            <div class="tab-filter-row"> 
+                <span>Periodo Gráfico:</span> 
+                <input type="date" id="f-dashboard-start"> a <input type="date" id="f-dashboard-end"> 
+                
+                <div style="display:flex; gap: 5px; margin-left: 10px;">
+                    <button id="btn-30days" class="btn-secondary" style="font-size:0.75rem; padding:4px 8px;">Últimos 30 días</button>
+                    <button id="btn-lastmonth" class="btn-secondary" style="font-size:0.75rem; padding:4px 8px;">Mes Pasado</button>
+                    <button id="btn-thisyear" class="btn-secondary" style="font-size:0.75rem; padding:4px 8px;">Este Año</button>
+                </div>
+
+                <select id="chart-type" style="margin-left:auto; padding:4px;">
+                    <option value="bar">Gráfico: Barras</option>
+                    <option value="line">Gráfico: Líneas</option>
+                </select>
+                
+                <small style="margin-left:10px">💡 Haz clic en los nombres abajo en la gráfica para ocultar/mostrar.</small> 
+            </div> 
+            <div class="chart-container"> 
+                <canvas id="mainTimelineChart"></canvas> 
+            </div> 
+        </section> 
+ 
+        <section id="view-bookings" class="app-view"> 
+            <h2>Nueva Reserva</h2> 
+            <form id="form-booking" class="data-form"> 
+                <input type="hidden" name="booking_id" id="edit-booking-id"> 
+                <div class="form-row-3"> 
+                    <div class="field"><label>Canal</label><select name="platform"><option value="Booking">Booking</option><option value="Airbnb">Airbnb</option><option value="Directo">Directo</option></select></div> 
+                    <div class="field"><label>Reserva #</label><input type="text" name="booking_ref" required></div> 
+                    <div class="field"><label>Origen</label><select name="origin" id="origin-select"></select></div> 
+                </div> 
+                <div class="form-row-3"> 
+                    <div class="field"><label>Check-in</label><input type="date" name="checkin" required></div> 
+                    <div class="field"><label>Check-out</label><input type="date" name="checkout" required></div> 
+                    <div class="field"><label>Bruto (€)</label><input type="number" name="bruto" step="0.01" required></div> 
+                </div> 
+                <div class="form-row-3"> 
+                    <div class="field"><label>Fee Canal</label><input type="number" name="fee_banco" step="0.01" value="0"></div> 
+                    <div class="field"><label>Fee THL</label><input type="number" name="fee_thl" step="0.01" value="0"></div> 
+                    <div class="field"><label>Limpieza</label><input type="number" name="limpieza" step="0.01" value="0"></div> 
+                </div> 
+                <button type="submit" class="btn-primary" style="width: 100%;">Guardar Reserva</button> 
+            </form> 
+ 
+            <div class="tab-filter-row"> 
+                <input type="date" id="f-bookings-start"> a <input type="date" id="f-bookings-end"> 
+                <select id="f-bookings-platform"><option value="">Todos los Canales</option><option value="Booking">Booking</option><option value="Airbnb">Airbnb</option><option value="Directo">Directo</option></select> 
+                <select id="f-bookings-origin"><option value="">Todos los Orígenes</option></select> 
+            </div> 
+ 
+            <div class="table-responsive"> 
+                <table class="data-table small"> 
+                    <thead> 
+                        <tr> 
+                            <th class="sortable" onclick="setSort('bookings', 'checkin')">Fecha ↕</th> 
+                            <th class="sortable" onclick="setSort('bookings', 'platform')">Canal ↕</th> 
+                            <th class="sortable" onclick="setSort('bookings', 'origin')">País ↕</th> 
+                            <th class="sortable" onclick="setSort('bookings', 'bruto')">Bruto ↕</th> 
+                            <th class="sortable" onclick="setSort('bookings', 'net')">Neto ↕</th> 
+                            <th>Acciones</th> 
+                        </tr> 
+                    </thead> 
+                    <tbody id="list-bookings-body"></tbody> 
+                </table> 
+            </div> 
+        </section> 
+ 
+        <section id="view-expenses" class="app-view"> 
+            <h2>Registrar Gasto de Propiedad</h2> 
+            <form id="form-expense" class="data-form"> 
+                <input type="hidden" name="expense_id"> 
+                <div class="form-row-3"> 
+                    <div class="field"><label>Fecha</label><input type="date" name="date" class="set-today" required></div> 
+                    <div class="field"><label>Tipo</label><select name="category" required><option value="Luz">Luz</option><option value="Gas">Gas</option><option value="Internet">Internet</option><option value="Comunidad">Comunidad</option><option value="IBI">IBI</option><option value="Mantenimiento">Mantenimiento</option></select></div> 
+                    <div class="field"><label>Monto €</label><input type="number" name="amount" step="0.01" required></div> 
+                </div> 
+                <div class="field"><label>Observaciones</label><input type="text" name="observations"></div> 
+                <button type="submit" class="btn-primary" style="width: 100%; margin-top:10px;">Registrar Gasto</button> 
+            </form> 
+ 
+            <div class="tab-filter-row"> 
+                <input type="date" id="f-expenses-start"> a <input type="date" id="f-expenses-end"> 
+                <select id="f-expenses-type"><option value="">Todos los Tipos</option><option value="Luz">Luz</option><option value="Gas">Gas</option><option value="Internet">Internet</option><option value="Comunidad">Comunidad</option><option value="IBI">IBI</option><option value="Mantenimiento">Mantenimiento</option></select> 
+            </div> 
+ 
+            <div class="table-responsive"> 
+                <table class="data-table small"> 
+                    <thead> 
+                        <tr> 
+                            <th class="sortable" onclick="setSort('expenses', 'date')">Fecha ↕</th> 
+                            <th class="sortable" onclick="setSort('expenses', 'category')">Categoría ↕</th> 
+                            <th class="sortable" onclick="setSort('expenses', 'amount')">Monto ↕</th> 
+                            <th>Acciones</th> 
+                        </tr> 
+                    </thead> 
+                    <tbody id="list-expenses-body"></tbody> 
+                </table> 
+            </div> 
+        </section> 
+ 
+        <section id="view-analysis" class="app-view analysis-container"> 
+            <!-- Sidebar for Analysis Type -->
+            <div style="width: 200px; background: white; border-right: 1px solid #e2e8f0; padding: 15px; display: flex; flex-direction: column; gap: 10px;">
+                <button class="btn-primary" id="btn-show-matrix" style="text-align:left; background: var(--accent);">Matriz de Resultados</button>
+                <button class="btn-secondary" id="btn-show-period" style="text-align:left; border: none;">Análisis por Período</button>
+                <button class="btn-secondary" id="btn-show-cross" style="text-align:left; border: none;">Explorador Cruzado</button>
+            </div>
+
+            <!-- Main Content Area -->
+            <div style="flex: 1; padding: 15px; overflow-x: auto;">
+                
+                <div class="tab-filter-row" style="margin-bottom:20px;"> 
+                    <input type="date" id="f-analysis-start"> a <input type="date" id="f-analysis-end"> 
+                    <select id="f-analysis-platform"><option value="">Canal...</option><option value="Booking">Booking</option><option value="Airbnb">Airbnb</option><option value="Directo">Directo</option></select> 
+                    <select id="f-analysis-origin"><option value="">Origen...</option></select> 
+                </div> 
+
+                <!-- View: Matriz -->
+                <div id="analysis-v-matrix">
+                    <h2>Matriz de Resultados</h2>
+                    <div style="margin-bottom: 10px;">
+                        <label>Seleccionar Variables (Y): </label>
+                        <select id="matrix-var-select" multiple style="height: 100px; width: 250px;">
+                            <option value="res_count" selected>Nº Reservas</option>
+                            <option value="nights" selected>Noches Ocupación</option>
+                            <option value="bruto" selected>Ingreso Bruto</option>
+                            <option value="net" selected>Ingreso Neto</option>
+                            <option value="expenses" selected>Gastos Totales</option>
+                            <option value="comisiones" selected>Comisiones (Canal + THL)</option>
+                        </select>
+                        <small>Presiona Ctrl/Cmd para seleccionar varias.</small>
+                    </div>
+                    <div class="table-responsive"> 
+                        <table class="data-table"> 
+                            <thead id="matrix-head"></thead> 
+                            <tbody id="matrix-body"></tbody> 
+                        </table> 
+                    </div> 
+                </div>
+
+                <!-- View: Periodo -->
+                <div id="analysis-v-period" class="hidden">
+                    <h2>Análisis por Período</h2>
+                    <div class="table-responsive"> 
+                        <table class="data-table"> 
+                            <thead> 
+                                <tr> 
+                                    <th class="sortable" onclick="setSort('analysis', 'month')">Mes ↕</th> 
+                                    <th class="sortable" onclick="setSort('analysis', 'nights')">Noches ↕</th> 
+                                    <th class="sortable" onclick="setSort('analysis', 'bruto')">Bruto ↕</th> 
+                                    <th class="sortable" onclick="setSort('analysis', 'net')">Neto ↕</th> 
+                                </tr> 
+                            </thead> 
+                            <tbody id="stats-table-body"></tbody> 
+                        </table> 
+                    </div> 
+                </div>
+
+                <!-- View: Cruzado -->
+                <div id="analysis-v-cross" class="hidden">
+                    <h2>Explorador Cruzado</h2>
+                    <div class="form-row-3" style="margin: 10px 0;"> 
+                        <select id="analysis-pivot-x"><option value="month">Mes</option><option value="origin">País Origen</option><option value="platform">Canal</option></select> 
+                        <select id="analysis-pivot-y"><option value="bruto">Ingreso Bruto</option><option value="net">Ingreso Neto</option><option value="count">Nº Reservas</option></select> 
+                    </div> 
+                    <div class="table-responsive">
+                        <table class="data-table"> 
+                            <tbody id="cross-analysis-body"></tbody> 
+                        </table> 
+                    </div>
+                </div>
+
+            </div>
+        </section> 
+ 
+        <section id="view-bank" class="app-view"> 
+            <div class="header-inline"> 
+                <h2>Bancos: Conciliación</h2> 
+                <div class="tab-filter-row" style="margin:0"> 
+                    <input type="date" id="f-bank-start"> a <input type="date" id="f-bank-end"> 
+                    <select id="f-bank-year" style="margin-left:10px;">
+                        <option value="">Cualquier Año</option>
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
+                        <option value="2023">2023</option>
+                    </select>
+                    <select id="f-bank-platform" style="margin-left:10px;">
+                        <option value="">Cualquier Canal</option>
+                        <option value="Booking">Booking</option>
+                        <option value="Airbnb">Airbnb</option>
+                        <option value="Directo">Directo</option>
+                    </select>
+                </div> 
+            </div> 
+            <div class="table-responsive"> 
+                <table class="data-table"> 
+                    <thead><tr><th>Reserva</th><th>Esperado (Neto)</th><th>Recibido</th><th>Diferencia</th><th>Observaciones</th></tr></thead> 
+                    <tbody id="bank-list-body"></tbody> 
+                </table> 
+            </div> 
+        </section> 
+ 
+        <section id="view-market" class="app-view"> 
+            <h2>Comparativa de Mercado</h2> 
+            <div class="card-grid" id="market-cards-container" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 20px;"></div> 
+            
+            <div class="card" style="padding: 0; overflow: hidden; position: relative;">
+                <div style="padding: 15px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0;">📍 Mapa de Competencia Local</h3>
+                    <div style="font-size: 0.8rem; display:flex; gap: 10px;">
+                        <span style="color: blue;">● Tu Propiedad</span>
+                        <span style="color: red;">● Turístico</span>
+                        <span style="color: orange;">● Temporal</span>
+                        <span style="color: green;">● Permanente</span>
+                    </div>
+                </div>
+                <div id="map" style="height: 400px; width: 100%;"></div>
+            </div>
+            <div class="card" style="margin-top:20px; text-align:center;"> 
+                <p id="market-status-box">Cargando datos del activo...</p> 
+            </div> 
+        </section> 
+ 
+    </main> 
+ 
+    <button id="btn-open-import" class="btn-secondary" style="position:fixed; bottom:20px; right:20px; border-radius:50px;"><i class="fa fa-upload"></i> Importar CSV</button> 
+ 
+    <script src="app.js"></script> 
+</body> 
+</html>
