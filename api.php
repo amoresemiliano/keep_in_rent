@@ -18,24 +18,55 @@ try {
     exit();
 }
 
+function base64UrlDecode($data) {
+    $remainder = strlen($data) % 4;
+    if ($remainder) {
+        $padlen = 4 - $remainder;
+        $data .= str_repeat('=', $padlen);
+    }
+    return base64_decode(strtr($data, '-_', '+/'));
+}
+
 // Authentication and Authorization via Firebase ID Token
 function verifyFirebaseToken($token) {
-    // A simplified JWT decoder. For production, it is highly recommended to use Google's public keys
-    // to verify the signature of the token, or use a proper library.
-    // However, on a shared hosting without composer, validating the issuer and audience,
-    // and decoding the payload is the minimum needed to extract the email reliably from the Firebase token.
+    if (!$token) return null;
+
     $parts = explode('.', $token);
     if (count($parts) !== 3) return null;
 
-    $payload = json_decode(base64_decode(str_replace(['-', '_'], ['+', '/'], $parts[1])), true);
-    if (!$payload) return null;
+    $headerStr = base64UrlDecode($parts[0]);
+    $payloadStr = base64UrlDecode($parts[1]);
+    $signature = base64UrlDecode($parts[2]);
 
-    // Check expiration
+    $header = json_decode($headerStr, true);
+    $payload = json_decode($payloadStr, true);
+
+    if (!$header || !$payload) return null;
+
+    // 1. Check expiration
     if (isset($payload['exp']) && $payload['exp'] < time()) {
-        return null;
+        return null; // Token expired
     }
 
-    // In a real app, verify signature using Google's certs from https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com
+    // 2. Fetch Google's public keys (cache them briefly if possible, but fetching directly for simplicity in a shared hosting context without external caching)
+    $keysJson = @file_get_contents('https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com');
+    if (!$keysJson) return null;
+    $keys = json_decode($keysJson, true);
+
+    // 3. Verify signature using the key that matches the 'kid' in the header
+    $kid = $header['kid'] ?? null;
+    if (!$kid || !isset($keys[$kid])) return null;
+
+    $publicKey = $keys[$kid];
+
+    $dataToVerify = $parts[0] . '.' . $parts[1];
+
+    // openssl_verify returns 1 on success, 0 on failure, -1 on error
+    $valid = openssl_verify($dataToVerify, $signature, $publicKey, OPENSSL_ALGO_SHA256);
+
+    if ($valid !== 1) {
+        return null; // Signature is invalid
+    }
 
     return $payload['email'] ?? null;
 }

@@ -1,19 +1,9 @@
+import { loginWithGoogle, logout } from "./authService.js";
+import { auth, onAuthStateChanged } from "./firebaseApp.js";
+
 // --- 1. CONFIGURACIÓN --- 
 const MONTHS_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]; 
 const COUNTRIES = ["España", "Francia", "Alemania", "Reino Unido", "Italia", "USA", "México", "Argentina", "Brasil", "Portugal", "Otros"].sort(); 
- 
-// --- FIREBASE CONFIG ---
-// TO DO: Replace with your actual Firebase project config
-const firebaseConfig = {
-    apiKey: "AIzaSyDummyKeyForDevelopment123",
-    authDomain: "madrid-rental.firebaseapp.com",
-    projectId: "madrid-rental",
-    storageBucket: "madrid-rental.appspot.com",
-    messagingSenderId: "1234567890",
-    appId: "1:1234567890:web:abcdef123456"
-};
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
 
 // --- API CONFIG ---
 const API_URL = 'api.php'; // Cambiar a la URL absoluta si está alojado en otro lugar (ej: https://tudominio.com/api.php)
@@ -38,25 +28,20 @@ class AppState {
     } 
 
     async loginWithGoogle() {
-        const provider = new firebase.auth.GoogleAuthProvider();
-        try {
-            await auth.signInWithPopup(provider);
-        } catch (error) {
-            console.error("Error signing in with Google", error);
-            alert("Error al iniciar sesión con Google.");
+        const user = await loginWithGoogle();
+        if (user) {
+            this.currentUser = user.email;
+        } else {
+            // Manejar error de forma silenciosa o notificar si quieres
         }
     }
     
     async logout() {
-        try {
-            await auth.signOut();
-            this.currentUser = null;
-            this.currentActiveId = null;
-            this.config = null;
-            localStorage.removeItem('last_active_id');
-        } catch (error) {
-            console.error("Error signing out", error);
-        }
+        await logout();
+        this.currentUser = null;
+        this.currentActiveId = null;
+        this.config = null;
+        localStorage.removeItem('last_active_id');
     }
 
     async loadUserProperties() {
@@ -269,7 +254,7 @@ class UI {
             };
         }
 
-        auth.onAuthStateChanged(async user => {
+        onAuthStateChanged(auth, async user => {
             if (user) {
                 this.state.currentUser = user.email;
                 await this.state.loadUserProperties();
@@ -918,8 +903,9 @@ class UI {
 } 
  
 const app = new UI(new AppState()); 
+window.app = app; // Exponer al window para que los eventos onclick del HTML puedan llamarlo
  
-// Globales para botones 
+// Globales para botones - Modificados para trabajar como modulo
 window.setSort = (t, k) => { app.sorts[t].d *= -1; app.sorts[t].k = k; app.renderAll(); }; 
 window.delB = async (id) => { await app.state.deleteRecord('booking', id); app.renderAll(); };
 window.editB = (id) => { const x = app.state.bookings.find(b => b.id === id); const f = document.getElementById('form-booking'); Object.keys(x).forEach(k => { if(f[k]) f[k].value = x[k]; }); window.scrollTo(0,0); }; 
