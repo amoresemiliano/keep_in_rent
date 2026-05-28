@@ -8,6 +8,12 @@ const COUNTRIES = ["España", "Francia", "Alemania", "Reino Unido", "Italia", "U
 // --- API CONFIG ---
 const API_URL = 'api.php'; // Cambiar a la URL absoluta si está alojado en otro lugar (ej: https://tudominio.com/api.php)
 
+const ALLOWED_EMAILS = [
+    "vegendigital@gmail.com",
+    "drcmarianela@gmail.com",
+    "emilianodirosa@gmail.com"
+];
+
 // --- 2. ESTADO --- 
 class AppState { 
     constructor() { 
@@ -30,9 +36,12 @@ class AppState {
     async loginWithGoogle() {
         const user = await loginWithGoogle();
         if (user) {
-            this.currentUser = user.email;
-        } else {
-            // Manejar error de forma silenciosa o notificar si quieres
+            if (ALLOWED_EMAILS.includes(user.email)) {
+                this.currentUser = user.email;
+            } else {
+                alert("Acceso denegado: Este correo no está autorizado.");
+                await this.logout();
+            }
         }
     }
     
@@ -244,8 +253,8 @@ class UI {
         document.getElementById('f-bank-year').onchange = (e) => { this.state.filters.bank.year = e.target.value; this.renderAll(); };
         document.getElementById('f-bank-platform').onchange = (e) => { this.state.filters.bank.platform = e.target.value; this.renderAll(); }; 
  
-        document.getElementById('form-booking').onsubmit = (e) => { e.preventDefault(); this.state.addBooking(Object.fromEntries(new FormData(e.target))); e.target.reset(); this.renderAll(); }; 
-        document.getElementById('form-expense').onsubmit = (e) => { e.preventDefault(); this.state.addExpense(Object.fromEntries(new FormData(e.target))); e.target.reset(); this.renderAll(); }; 
+        document.getElementById('form-booking').onsubmit = async (e) => { e.preventDefault(); await this.state.addBooking(Object.fromEntries(new FormData(e.target))); e.target.reset(); this.renderAll(); };
+        document.getElementById('form-expense').onsubmit = async (e) => { e.preventDefault(); await this.state.addExpense(Object.fromEntries(new FormData(e.target))); e.target.reset(); this.renderAll(); };
  
         const btnGoogleLogin = document.getElementById('btn-google-login');
         if (btnGoogleLogin) {
@@ -255,11 +264,12 @@ class UI {
         }
 
         onAuthStateChanged(auth, async user => {
-            if (user) {
+            if (user && ALLOWED_EMAILS.includes(user.email)) {
                 this.state.currentUser = user.email;
                 await this.state.loadUserProperties();
                 this.renderAll();
             } else {
+                if (user) await this.state.logout(); // Fuerza salida si el correo no es válido pero quedó en caché
                 this.state.currentUser = null;
                 this.renderAll();
             }
@@ -309,7 +319,7 @@ class UI {
             }
         };
 
-        document.getElementById('setup-form').onsubmit = (e) => { 
+        document.getElementById('setup-form').onsubmit = async (e) => {
             e.preventDefault(); 
             const formData = new FormData(e.target);
             const d = Object.fromEntries(formData);
@@ -323,7 +333,7 @@ class UI {
             // Add custom features as JSON string
             d.custom_features = JSON.stringify(customFeatures);
 
-            this.state.addProperty(d); 
+            await this.state.addProperty(d);
 
             // Reset modal state
             document.getElementById('custom-features-container').innerHTML = '';

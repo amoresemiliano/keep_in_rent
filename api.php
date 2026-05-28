@@ -43,13 +43,31 @@ function verifyFirebaseToken($token) {
 
     if (!$header || !$payload) return null;
 
-    // 1. Check expiration
+    // 1. Check expiration, audience, and issuer to prevent cross-project spoofing
     if (isset($payload['exp']) && $payload['exp'] < time()) {
         return null; // Token expired
     }
+    $projectId = "keep-in-rent";
+    if (!isset($payload['aud']) || $payload['aud'] !== $projectId) {
+        return null;
+    }
+    if (!isset($payload['iss']) || $payload['iss'] !== 'https://securetoken.google.com/' . $projectId) {
+        return null;
+    }
 
-    // 2. Fetch Google's public keys (cache them briefly if possible, but fetching directly for simplicity in a shared hosting context without external caching)
-    $keysJson = @file_get_contents('https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com');
+    // 2. Fetch Google's public keys using a local file cache to prevent rate-limiting and latency
+    $cacheFile = sys_get_temp_dir() . '/firebase_keys.json';
+    $keysJson = '';
+
+    if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 3600)) {
+        $keysJson = file_get_contents($cacheFile);
+    } else {
+        $keysJson = @file_get_contents('https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com');
+        if ($keysJson) {
+            file_put_contents($cacheFile, $keysJson);
+        }
+    }
+
     if (!$keysJson) return null;
     $keys = json_decode($keysJson, true);
 
@@ -80,10 +98,24 @@ if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
 
 $userEmail = verifyFirebaseToken($token);
 
-if (!$userEmail && $_SERVER['REQUEST_METHOD'] !== 'OPTIONS') {
-    http_response_code(401);
-    echo json_encode(["error" => "Unauthorized"]);
-    exit();
+$allowed_emails = [
+    "vegendigital@gmail.com",
+    "drcmarianela@gmail.com",
+    "emilianodirosa@gmail.com"
+];
+
+if ($_SERVER['REQUEST_METHOD'] !== 'OPTIONS') {
+    if (!$userEmail) {
+        http_response_code(401);
+        echo json_encode(["error" => "Unauthorized"]);
+        exit();
+    }
+
+    if (!in_array($userEmail, $allowed_emails)) {
+        http_response_code(403);
+        echo json_encode(["error" => "Forbidden: Email not in allowlist"]);
+        exit();
+    }
 }
 
 $action = isset($_GET['action']) ? $_GET['action'] : '';
