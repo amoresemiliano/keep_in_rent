@@ -30,6 +30,18 @@ body {
     z-index: 100;  
     box-shadow: var(--shadow); 
 } 
+
+.header-select {
+    background: rgba(255,255,255,0.1);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 5px;
+    border-radius: 4px;
+}
+.header-select option {
+    color: black;
+    background: white;
+}
  
 .header-info {  
     display: flex;  

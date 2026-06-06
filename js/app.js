@@ -8,12 +8,6 @@ const COUNTRIES = ["España", "Francia", "Alemania", "Reino Unido", "Italia", "U
 // --- API CONFIG ---
 const API_URL = 'api.php'; // Cambiar a la URL absoluta si está alojado en otro lugar (ej: https://tudominio.com/api.php)
 
-const ALLOWED_EMAILS = [
-    "vegendigital@gmail.com",
-    "drcmarianela@gmail.com",
-    "emilianodirosa@gmail.com"
-];
-
 // --- 2. ESTADO --- 
 class AppState { 
     constructor() { 
@@ -36,12 +30,7 @@ class AppState {
     async loginWithGoogle() {
         const user = await loginWithGoogle();
         if (user) {
-            if (ALLOWED_EMAILS.includes(user.email)) {
-                this.currentUser = user.email;
-            } else {
-                alert("Acceso denegado: Este correo no está autorizado.");
-                await this.logout();
-            }
+            this.currentUser = user.email;
         }
     }
     
@@ -57,6 +46,14 @@ class AppState {
         if (!this.currentUser) return;
         try {
             const token = await auth.currentUser.getIdToken();
+
+            // Load global settings
+            const settingsRes = await fetch(`${API_URL}?action=get_settings`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            this.globalSettings = await settingsRes.json();
+
+            // Load properties
             const res = await fetch(`${API_URL}?action=get_properties`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -70,6 +67,67 @@ class AppState {
                 this.config = null;
             }
         } catch (e) { console.error("Error loading properties:", e); }
+    }
+
+    async adminLinkProperty(property_id, target_email) {
+        try {
+            const token = await auth.currentUser.getIdToken();
+            await fetch(`${API_URL}?action=admin_link_property`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ property_id, target_email })
+            });
+            alert('Propiedad vinculada correctamente.');
+        } catch (e) { console.error(e); }
+    }
+
+    async adminUpdateSettings(key, value) {
+        try {
+            const token = await auth.currentUser.getIdToken();
+            await fetch(`${API_URL}?action=admin_update_settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ key, value })
+            });
+            alert('Ajustes guardados.');
+            await this.loadUserProperties();
+        } catch (e) { console.error(e); }
+    }
+
+    async adminDeleteProperty(property_id) {
+        try {
+            const token = await auth.currentUser.getIdToken();
+            await fetch(`${API_URL}?action=admin_delete_property`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ property_id })
+            });
+            alert('Propiedad eliminada.');
+            this.currentActiveId = null;
+            await this.loadUserProperties();
+        } catch (e) { console.error(e); }
+    }
+
+    async adminGetUsers() {
+        try {
+            const token = await auth.currentUser.getIdToken();
+            const res = await fetch(`${API_URL}?action=admin_get_users`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            return await res.json();
+        } catch (e) { console.error(e); return []; }
+    }
+
+    async adminDeleteUser(user_id) {
+        try {
+            const token = await auth.currentUser.getIdToken();
+            await fetch(`${API_URL}?action=admin_delete_user`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ user_id })
+            });
+            alert('Usuario eliminado.');
+        } catch (e) { console.error(e); }
     }
 
     async addProperty(data) {
@@ -196,6 +254,62 @@ class UI {
             if(el) el.innerHTML += h; 
         }); 
     } 
+
+    renderDynamicSelects() {
+        if(!this.state.globalSettings) return;
+
+        const cats = this.state.globalSettings.expense_categories || [];
+        const chans = this.state.globalSettings.booking_platforms || [];
+
+        const catHtml = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+        const chanHtml = chans.map(c => `<option value="${c}">${c}</option>`).join('');
+
+        const updateSelect = (id, html, defaultOption = '') => {
+            const el = document.getElementById(id);
+            if(el) {
+                const val = el.value;
+                el.innerHTML = defaultOption + html;
+                if (val) el.value = val;
+            }
+        };
+
+        // Expenses categories
+        updateSelect('form-category-select', catHtml);
+        updateSelect('f-expenses-type', catHtml, '<option value="">Todos los Tipos</option>');
+
+        // Platforms / Channels
+        updateSelect('form-platform-select', chanHtml);
+        updateSelect('f-bookings-platform', chanHtml, '<option value="">Todos los Canales</option>');
+        updateSelect('f-analysis-platform', chanHtml, '<option value="">Canal...</option>');
+        updateSelect('f-bank-platform', chanHtml, '<option value="">Cualquier Canal</option>');
+
+        // Populate Admin Inputs if admin
+        if (this.state.currentUser === 'vegendigital@gmail.com') {
+            document.getElementById('admin-cat-input').value = cats.join(', ');
+            document.getElementById('admin-chan-input').value = chans.join(', ');
+
+            updateSelect('admin-prop-select',
+                this.state.properties.map(p => `<option value="${p.id}">${p.calle} (Owner: ${p.owner_email || 'You'})</option>`).join(''),
+                '<option value="">Seleccionar Propiedad...</option>'
+            );
+
+            // Populate Users Table
+            this.state.adminGetUsers().then(users => {
+                const tbody = document.getElementById('admin-users-body');
+                if (tbody) {
+                    tbody.innerHTML = users.map(u => `
+                        <tr>
+                            <td>${u.id}</td>
+                            <td>${u.email}</td>
+                            <td>
+                                ${u.email !== 'vegendigital@gmail.com' ? `<button class="icon-btn" onclick="window.delUser(${u.id})" title="Eliminar Usuario"><i class="fa fa-trash text-danger"></i></button>` : ''}
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            });
+        }
+    }
  
     bindEvents() { 
         document.querySelectorAll('.nav-btn').forEach(b => b.onclick = () => { 
@@ -255,7 +369,37 @@ class UI {
  
         document.getElementById('form-booking').onsubmit = async (e) => { e.preventDefault(); await this.state.addBooking(Object.fromEntries(new FormData(e.target))); e.target.reset(); this.renderAll(); };
         document.getElementById('form-expense').onsubmit = async (e) => { e.preventDefault(); await this.state.addExpense(Object.fromEntries(new FormData(e.target))); e.target.reset(); this.renderAll(); };
- 
+
+        // Admin Events
+        document.getElementById('form-admin-link').onsubmit = async (e) => {
+            e.preventDefault();
+            const propId = document.getElementById('admin-prop-select').value;
+            const targetEmail = document.getElementById('admin-user-email').value;
+            if(propId && targetEmail) {
+                await this.state.adminLinkProperty(propId, targetEmail);
+                e.target.reset();
+            }
+        };
+
+        document.getElementById('btn-admin-save-cat').onclick = async () => {
+            const val = document.getElementById('admin-cat-input').value.split(',').map(s => s.trim()).filter(s => s);
+            await this.state.adminUpdateSettings('expense_categories', val);
+            this.renderAll();
+        };
+
+        document.getElementById('btn-admin-save-chan').onclick = async () => {
+            const val = document.getElementById('admin-chan-input').value.split(',').map(s => s.trim()).filter(s => s);
+            await this.state.adminUpdateSettings('booking_platforms', val);
+            this.renderAll();
+        };
+
+        document.getElementById('btn-admin-delete-prop').onclick = async () => {
+            if(this.state.currentActiveId && confirm("⚠️ ATENCIÓN ⚠️\n¿Estás seguro que deseas ELIMINAR PERMANENTEMENTE esta propiedad y todos sus datos? Esta acción no se puede deshacer.")) {
+                await this.state.adminDeleteProperty(this.state.currentActiveId);
+                this.renderAll();
+            }
+        };
+
         const btnGoogleLogin = document.getElementById('btn-google-login');
         if (btnGoogleLogin) {
             btnGoogleLogin.onclick = () => {
@@ -264,12 +408,11 @@ class UI {
         }
 
         onAuthStateChanged(auth, async user => {
-            if (user && ALLOWED_EMAILS.includes(user.email)) {
+            if (user) {
                 this.state.currentUser = user.email;
                 await this.state.loadUserProperties();
                 this.renderAll();
             } else {
-                if (user) await this.state.logout(); // Fuerza salida si el correo no es válido pero quedó en caché
                 this.state.currentUser = null;
                 this.renderAll();
             }
@@ -633,6 +776,14 @@ class UI {
         sel.innerHTML = '<option value="">Seleccionar Propiedad...</option>' + 
             this.state.properties.map(p => `<option value="${p.id}" ${p.id == this.state.currentActiveId ? 'selected' : ''}>${p.calle}</option>`).join('');
 
+        if (this.state.currentUser === 'vegendigital@gmail.com') {
+            document.getElementById('nav-btn-admin').classList.remove('hidden');
+        } else {
+            document.getElementById('nav-btn-admin').classList.add('hidden');
+        }
+
+        this.renderDynamicSelects();
+
         if(!this.state.config || !this.state.currentActiveId) { 
             if (this.state.properties.length > 0) {
                 this.state.loadActiveData(this.state.properties[0].id).then(() => {
@@ -644,9 +795,11 @@ class UI {
                     this.renderBank();
                 });
             } else {
-                setupModal.classList.remove('hidden'); 
-                setupModal.style.display = 'flex';
-                document.getElementById('close-setup').classList.add('hidden');
+                if (this.state.currentUser !== 'vegendigital@gmail.com') {
+                    setupModal.classList.remove('hidden');
+                    setupModal.style.display = 'flex';
+                    document.getElementById('close-setup').classList.add('hidden');
+                }
             }
             return;
         } 
@@ -716,8 +869,9 @@ class UI {
                 <td>${x.checkin}</td><td>${x.platform}</td><td>${x.origin}</td><td>${parseFloat(x.bruto).toFixed(2)}€</td> 
                 <td class="text-success">${parseFloat(x.net).toFixed(2)}€</td> 
                 <td> 
-                    <button class="icon-btn" onclick="window.editB(${x.id})"><i class="fa fa-pencil text-accent"></i></button> 
-                    <button class="icon-btn" onclick="window.delB(${x.id})"><i class="fa fa-trash text-danger"></i></button> 
+                    <button class="icon-btn" onclick="window.editB(${x.id})" title="Editar"><i class="fa fa-pencil text-accent"></i></button>
+                    <button class="icon-btn" onclick="window.dupB(${x.id})" title="Duplicar"><i class="fa fa-copy text-success"></i></button>
+                    <button class="icon-btn" onclick="window.delB(${x.id})" title="Eliminar"><i class="fa fa-trash text-danger"></i></button>
                 </td> 
             </tr> 
         `).join(''); 
@@ -731,8 +885,9 @@ class UI {
             <tr> 
                 <td>${x.date}</td><td>${x.category}</td><td>${parseFloat(x.amount).toFixed(2)}€</td> 
                 <td> 
-                    <button class="icon-btn" onclick="window.editE(${x.id})"><i class="fa fa-pencil text-accent"></i></button> 
-                    <button class="icon-btn" onclick="window.delE(${x.id})"><i class="fa fa-trash text-danger"></i></button> 
+                    <button class="icon-btn" onclick="window.editE(${x.id})" title="Editar"><i class="fa fa-pencil text-accent"></i></button>
+                    <button class="icon-btn" onclick="window.dupE(${x.id})" title="Duplicar"><i class="fa fa-copy text-success"></i></button>
+                    <button class="icon-btn" onclick="window.delE(${x.id})" title="Eliminar"><i class="fa fa-trash text-danger"></i></button>
                 </td> 
             </tr> 
         `).join(''); 
@@ -917,10 +1072,34 @@ window.app = app; // Exponer al window para que los eventos onclick del HTML pue
  
 // Globales para botones - Modificados para trabajar como modulo
 window.setSort = (t, k) => { app.sorts[t].d *= -1; app.sorts[t].k = k; app.renderAll(); }; 
-window.delB = async (id) => { await app.state.deleteRecord('booking', id); app.renderAll(); };
-window.editB = (id) => { const x = app.state.bookings.find(b => b.id === id); const f = document.getElementById('form-booking'); Object.keys(x).forEach(k => { if(f[k]) f[k].value = x[k]; }); window.scrollTo(0,0); }; 
-window.delE = async (id) => { await app.state.deleteRecord('expense', id); app.renderAll(); };
-window.editE = (id) => { const x = app.state.expenses.find(e => e.id === id); const f = document.getElementById('form-expense'); Object.keys(x).forEach(k => { if(f[k]) f[k].value = x[k]; }); window.scrollTo(0,0); }; 
+window.delB = async (id) => { if(confirm("¿Eliminar reserva?")) { await app.state.deleteRecord('booking', id); app.renderAll(); } };
+window.editB = (id) => {
+    const x = app.state.bookings.find(b => b.id == id);
+    const f = document.getElementById('form-booking');
+    Object.keys(x).forEach(k => { if(f[k]) f[k].value = x[k]; });
+    f['booking_id'].value = id; // Asegurar que el ID se pasa al hidden input
+    document.querySelector('button[data-target="view-bookings"]').click();
+    window.scrollTo(0,0);
+};
+window.dupB = (id) => {
+    window.editB(id);
+    document.getElementById('edit-booking-id').value = ''; // Vaciar ID para que se guarde como nuevo
+    alert("Reserva duplicada en el formulario. Edita los campos necesarios y presiona Guardar.");
+};
+window.delE = async (id) => { if(confirm("¿Eliminar gasto?")) { await app.state.deleteRecord('expense', id); app.renderAll(); } };
+window.editE = (id) => {
+    const x = app.state.expenses.find(e => e.id == id);
+    const f = document.getElementById('form-expense');
+    Object.keys(x).forEach(k => { if(f[k]) f[k].value = x[k]; });
+    f['expense_id'].value = id; // Asegurar que el ID se pasa al hidden input
+    document.querySelector('button[data-target="view-expenses"]').click();
+    window.scrollTo(0,0);
+};
+window.dupE = (id) => {
+    window.editE(id);
+    document.querySelector('#form-expense [name="expense_id"]').value = ''; // Vaciar ID para nuevo
+    alert("Gasto duplicado en el formulario. Edita los campos necesarios y presiona Guardar.");
+};
 window.upBank = async (id, k, v) => {
     let r = app.state.bankRecords.find(x => x.booking_id === id);
     let val = r ? r.val : 0;
@@ -929,4 +1108,10 @@ window.upBank = async (id, k, v) => {
     if(k === 'obs') obs = v;
     await app.state.updateBank(id, val, obs);
     app.renderAll();
+};
+window.delUser = async (id) => {
+    if(confirm("¿Eliminar usuario y todas sus propiedades asociadas permanentemente?")) {
+        await app.state.adminDeleteUser(id);
+        app.renderAll();
+    }
 };

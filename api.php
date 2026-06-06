@@ -98,22 +98,10 @@ if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
 
 $userEmail = verifyFirebaseToken($token);
 
-$allowed_emails = [
-    "vegendigital@gmail.com",
-    "drcmarianela@gmail.com",
-    "emilianodirosa@gmail.com"
-];
-
 if ($_SERVER['REQUEST_METHOD'] !== 'OPTIONS') {
     if (!$userEmail) {
         http_response_code(401);
         echo json_encode(["error" => "Unauthorized"]);
-        exit();
-    }
-
-    if (!in_array($userEmail, $allowed_emails)) {
-        http_response_code(403);
-        echo json_encode(["error" => "Forbidden: Email not in allowlist"]);
         exit();
     }
 }
@@ -136,11 +124,29 @@ function getUserId($conn, $email) {
 
 // Ensure the user actually owns the property they are trying to access
 function verifyPropertyOwnership($conn, $property_id, $user_id) {
-    $stmt = $conn->prepare("SELECT id FROM properties WHERE id = ? AND user_id = ?");
-    $stmt->execute([$property_id, $user_id]);
+    // Permite al super admin acceder a cualquier propiedad
+    global $userEmail;
+    if ($userEmail === 'vegendigital@gmail.com') return;
+
+    // Check direct ownership or shared access
+    $stmt = $conn->prepare("
+        SELECT id FROM properties WHERE id = ? AND user_id = ?
+        UNION
+        SELECT property_id AS id FROM property_users WHERE property_id = ? AND user_id = ?
+    ");
+    $stmt->execute([$property_id, $user_id, $property_id, $user_id]);
     if (!$stmt->fetch()) {
         http_response_code(403);
         echo json_encode(["error" => "Forbidden: You do not own this property"]);
+        exit();
+    }
+}
+
+// Function to enforce super admin
+function enforceSuperAdmin($email) {
+    if ($email !== 'vegendigital@gmail.com') {
+        http_response_code(403);
+        echo json_encode(["error" => "Forbidden: Super Admin only"]);
         exit();
     }
 }
@@ -151,9 +157,27 @@ if ($userEmail) {
 }
 
 switch($action) {
+    case 'get_settings':
+        $stmt = $conn->query("SELECT setting_key, setting_value FROM global_settings");
+        $settings = [];
+        while($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $settings[$row['setting_key']] = json_decode($row['setting_value'], true);
+        }
+        echo json_encode($settings);
+        break;
+
     case 'get_properties':
-        $stmt = $conn->prepare("SELECT * FROM properties WHERE user_id = ?");
-        $stmt->execute([$user_id]);
+        if ($userEmail === 'vegendigital@gmail.com') {
+            $stmt = $conn->prepare("SELECT p.*, u.email as owner_email FROM properties p JOIN users u ON p.user_id = u.id");
+            $stmt->execute();
+        } else {
+            $stmt = $conn->prepare("
+                SELECT p.* FROM properties p WHERE p.user_id = ?
+                UNION
+                SELECT p.* FROM properties p JOIN property_users pu ON p.id = pu.property_id WHERE pu.user_id = ?
+            ");
+            $stmt->execute([$user_id, $user_id]);
+        }
         echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
         break;
 
@@ -214,6 +238,61 @@ switch($action) {
 
         $stmt = $conn->prepare("DELETE FROM bookings WHERE id = ? AND property_id = ?");
         $stmt->execute([$data['id'], $data['property_id']]);
+        echo json_encode(["status" => "success"]);
+        break;
+
+    // --- SUPER ADMIN ACTIONS ---
+    case 'admin_get_users':
+        enforceSuperAdmin($userEmail);
+        $stmt = $conn->query("SELECT id, email FROM users");
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+        break;
+
+    case 'admin_link_property':
+        enforceSuperAdmin($userEmail);
+        $data = json_decode(file_get_contents("php://input"), true);
+        $target_user_id = getUserId($conn, $data['target_email']);
+        $prop_id = $data['property_id'];
+
+        $stmt = $conn->prepare("INSERT IGNORE INTO property_users (property_id, user_id, role) VALUES (?, ?, 'editor')");
+        $stmt->execute([$prop_id, $target_user_id]);
+        echo json_encode(["status" => "success"]);
+        break;
+
+    case 'admin_update_settings':
+        enforceSuperAdmin($userEmail);
+        $data = json_decode(file_get_contents("php://input"), true);
+        $key = $data['key'];
+        $val = json_encode($data['value']);
+
+        $stmt = $conn->prepare("INSERT INTO global_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?");
+        $stmt->execute([$key, $val, $val]);
+        echo json_encode(["status" => "success"]);
+        break;
+
+    case 'admin_delete_property':
+        enforceSuperAdmin($userEmail);
+        $data = json_decode(file_get_contents("php://input"), true);
+        $stmt = $conn->prepare("DELETE FROM properties WHERE id = ?");
+        $stmt->execute([$data['property_id']]);
+        echo json_encode(["status" => "success"]);
+        break;
+
+    case 'admin_delete_user':
+        enforceSuperAdmin($userEmail);
+        $data = json_decode(file_get_contents("php://input"), true);
+        $target_user_id = $data['user_id'];
+
+        // Prevent deleting self
+        $adminId = getUserId($conn, $userEmail);
+        if ($target_user_id == $adminId) {
+             http_response_code(400);
+             echo json_encode(["error" => "Cannot delete super admin"]);
+             exit();
+        }
+
+        $stmt = $conn->prepare("DELETE FROM users WHERE id = ?");
+        $stmt->execute([$target_user_id]);
         echo json_encode(["status" => "success"]);
         break;
 
