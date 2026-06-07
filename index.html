@@ -1,0 +1,421 @@
+<!DOCTYPE html> 
+<html lang="es"> 
+<head> 
+    <meta charset="UTF-8"> 
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+    <title>Keep in Rent</title> 
+    <link rel="stylesheet" href="style.css"> 
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet"> 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> 
+    <!-- Leaflet para el mapa -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        .address-box {
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        .address-box:hover {
+            background: rgba(255,255,255,0.1);
+        }
+    </style>
+</head> 
+<body> 
+ 
+    <!-- LOGIN MODAL -->
+    <div id="login-modal" class="modal" style="display:flex;">
+        <div class="modal-content" style="text-align: center;">
+            <h2 style="margin-bottom: 20px;">Bienvenido a <span class="text-accent">Keep in Rent</span></h2>
+            <p style="margin-bottom: 20px; font-size: 0.9rem; color: #64748b;">Inicia sesión con tu cuenta de Google para acceder a tus propiedades.</p>
+            <button id="btn-login-google" class="btn-primary" style="display: flex; align-items: center; justify-content: center; gap: 10px; background: white; color: #475569; border: 1px solid #cbd5e1;">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="Google" style="width: 20px;">
+                Continuar con Google
+            </button>
+            <p id="login-error" style="color: var(--danger); margin-top: 15px; font-size: 0.8rem; display: none;"></p>
+        </div>
+    </div>
+
+    <div id="setup-modal" class="modal hidden"> 
+        <div class="modal-content"> 
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 id="setup-title">Configurar Propiedad</h2> 
+                <button id="close-setup" class="icon-btn"><i class="fa fa-times"></i></button>
+            </div>
+            <form id="form-setup"> 
+                <div class="field mt-2"><label>Nombre Interno</label><input type="text" id="conf-name" required></div> 
+                <div class="field mt-2"><label>Calle y Número</label><input type="text" id="conf-calle" required></div> 
+                <div class="form-row-3 mt-2"> 
+                    <div class="field"><label>Ciudad</label><input type="text" id="conf-ciudad" required></div> 
+                    <div class="field"><label>C.P.</label><input type="text" id="conf-cp" required></div> 
+                    <div class="field"><label>País</label><input type="text" id="conf-pais" value="España" required></div> 
+                </div> 
+                
+                <h3 style="margin-top:20px; font-size: 0.9rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px;">Características (Mercado)</h3>
+                <div class="form-row-3 mt-2">
+                    <div class="field"><label>Habitaciones</label><input type="number" id="conf-rooms" min="0" required></div>
+                    <div class="field"><label>Baños</label><input type="number" id="conf-baths" min="0" step="0.5" required></div>
+                    <div class="field"><label>Capacidad (Pax)</label><input type="number" id="conf-pax" min="1" required></div>
+                </div>
+                <div class="form-row-3 mt-2">
+                    <div class="field"><label>M2 Cuadrados</label><input type="number" id="conf-m2" min="1" required></div>
+                    <div class="field"><label>Planta</label><input type="text" id="conf-floor" placeholder="Ej: Baja, 1, 2..."></div>
+                    <div class="field"><label>Ascensor</label><select id="conf-elevator"><option value="si">Sí</option><option value="no">No</option></select></div>
+                </div>
+                
+                <div id="custom-features-container" class="mt-2"></div>
+                <button type="button" id="btn-add-feature" class="btn-secondary mt-2" style="font-size: 0.8rem; padding: 5px 10px;"><i class="fa fa-plus"></i> Añadir otra característica</button>
+
+                <button type="submit" class="btn-primary" style="margin-top:20px;">Guardar Propiedad</button> 
+            </form> 
+        </div> 
+    </div>
+ 
+    <div id="import-modal" class="modal hidden">
+        <div class="modal-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>Importar Datos (CSV)</h2>
+                <button id="close-import" class="icon-btn"><i class="fa fa-times"></i></button>
+            </div>
+            <form id="import-form">
+                <div class="field mt-2">
+                    <label>CSV Reservas</label>
+                    <input type="file" id="file-bookings" accept=".csv">
+                </div>
+                <div class="field mt-2">
+                    <label>CSV Gastos</label>
+                    <input type="file" id="file-expenses" accept=".csv">
+                </div>
+                <div class="field mt-2" style="flex-direction: row; align-items: center; gap: 10px;">
+                    <input type="checkbox" id="clear-existing" value="1">
+                    <label for="clear-existing" style="color: var(--danger);">Eliminar datos actuales antes de importar</label>
+                </div>
+                <button type="submit" class="btn-primary mt-2">Procesar e Importar</button>
+            </form>
+            <p style="font-size: 0.8rem; margin-top: 15px; color: #64748b;">Asegúrate de que los CSV tienen el formato correcto.</p>
+        </div>
+    </div>
+ 
+    <header class="main-header"> 
+        <div class="header-info"> 
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <h1>Keep in <span class="text-light">Rent</span></h1> 
+                <select id="property-selector" class="header-select"></select>
+                <button id="btn-add-property" class="btn-secondary" style="padding: 5px 10px; font-size: 0.8rem;"><i class="fa fa-plus"></i></button>
+            </div>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div class="address-box" id="edit-address-trigger"> 
+                    <small><i class="fa fa-map-marker-alt text-accent"></i> <span id="display-address">Cargando...</span></small> 
+                </div> 
+                <button id="btn-logout" class="btn-secondary" style="padding: 5px 10px; font-size: 0.8rem;"><i class="fa fa-sign-out-alt"></i> Salir</button>
+            </div>
+        </div> 
+        <nav id="main-nav"> 
+            <button class="nav-btn active" data-target="view-dashboard">Resumen</button> 
+            <button class="nav-btn" data-target="view-bookings">Reservas</button> 
+            <button class="nav-btn" data-target="view-expenses">Gastos</button> 
+            <button class="nav-btn" data-target="view-analysis">Análisis</button> 
+            <button class="nav-btn" data-target="view-bank">Bancos</button> 
+            <button class="nav-btn" data-target="view-market">Comparativa</button> 
+            <button class="nav-btn hidden" id="nav-btn-admin" data-target="view-admin" style="background: #f43f5e; color: white;">Super Admin</button>
+        </nav> 
+    </header> 
+ 
+    <main id="app-container"> 
+         
+        <section id="view-dashboard" class="app-view active"> 
+            <div class="card-grid"> 
+                <div class="card card-bruto"><h3>Ingresos Brutos</h3><p id="dash-bruto">0.00€</p></div> 
+                <div class="card card-gestion"><h3>Gastos Gestión</h3><p id="dash-gestion">0.00€</p></div> 
+                <div class="card card-propiedad"><h3>Gastos Propiedad</h3><p id="dash-propiedad">0.00€</p></div> 
+                <div class="card card-neto"><h3>Beneficio Neto</h3><p id="dash-neto">0.00€</p></div> 
+            </div> 
+            <div class="tab-filter-row"> 
+                <span>Periodo Gráfico:</span> 
+                <input type="date" id="f-dashboard-start"> a <input type="date" id="f-dashboard-end"> 
+                
+                <div style="display:flex; gap: 5px; margin-left: 10px;">
+                    <button id="btn-30days" class="btn-secondary" style="font-size:0.75rem; padding:4px 8px;">Últimos 30 días</button>
+                    <button id="btn-lastmonth" class="btn-secondary" style="font-size:0.75rem; padding:4px 8px;">Mes Pasado</button>
+                    <button id="btn-thisyear" class="btn-secondary" style="font-size:0.75rem; padding:4px 8px;">Este Año</button>
+                </div>
+
+                <select id="chart-type" style="margin-left:auto; padding:4px;">
+                    <option value="bar">Gráfico: Barras</option>
+                    <option value="line">Gráfico: Líneas</option>
+                </select>
+                
+                <small style="margin-left:10px">💡 Haz clic en los nombres abajo en la gráfica para ocultar/mostrar.</small> 
+            </div> 
+            <div class="chart-container"> 
+                <canvas id="mainTimelineChart"></canvas> 
+            </div> 
+        </section> 
+ 
+        <section id="view-bookings" class="app-view"> 
+            <h2>Nueva Reserva</h2> 
+            <form id="form-booking" class="data-form"> 
+                <input type="hidden" name="booking_id" id="edit-booking-id"> 
+                <div class="form-row-3"> 
+                    <div class="field"><label>Canal</label><select name="platform" id="form-platform-select"></select></div> 
+                    <div class="field"><label>Reserva #</label><input type="text" name="booking_ref" required></div> 
+                    <div class="field"><label>Origen</label><select name="origin" id="origin-select"></select></div> 
+                </div> 
+                <div class="form-row-3"> 
+                    <div class="field"><label>Check-in</label><input type="date" name="checkin" required></div> 
+                    <div class="field"><label>Check-out</label><input type="date" name="checkout" required></div> 
+                    <div class="field"><label>Bruto (€)</label><input type="number" name="bruto" step="0.01" required></div> 
+                </div> 
+                <div class="form-row-3"> 
+                    <div class="field"><label>Fee Canal</label><input type="number" name="fee_banco" step="0.01" value="0"></div> 
+                    <div class="field"><label>Fee THL</label><input type="number" name="fee_thl" step="0.01" value="0"></div> 
+                    <div class="field"><label>Limpieza</label><input type="number" name="limpieza" step="0.01" value="0"></div> 
+                </div> 
+                <button type="submit" class="btn-primary" style="width: 100%;">Guardar Reserva</button> 
+            </form> 
+ 
+            <div class="tab-filter-row"> 
+                <input type="date" id="f-bookings-start"> a <input type="date" id="f-bookings-end"> 
+                <select id="f-bookings-platform"><option value="">Todos los Canales</option></select> 
+                <select id="f-bookings-origin"><option value="">Todos los Orígenes</option></select> 
+            </div> 
+ 
+            <div class="table-responsive"> 
+                <table class="data-table small"> 
+                    <thead> 
+                        <tr> 
+                            <th class="sortable" onclick="setSort('bookings', 'checkin')">Check-in ↕</th> 
+                            <th class="sortable" onclick="setSort('bookings', 'platform')">Canal ↕</th> 
+                            <th class="sortable" onclick="setSort('bookings', 'origin')">Origen ↕</th> 
+                            <th class="sortable" onclick="setSort('bookings', 'bruto')">Bruto ↕</th> 
+                            <th class="sortable" onclick="setSort('bookings', 'net')">Neto ↕</th> 
+                            <th style="min-width: 100px;">Acciones</th> 
+                        </tr> 
+                    </thead> 
+                    <tbody id="list-bookings-body"></tbody> 
+                </table> 
+            </div> 
+        </section> 
+ 
+        <section id="view-expenses" class="app-view"> 
+            <h2>Registrar Gasto</h2> 
+            <form id="form-expense" class="data-form"> 
+                <input type="hidden" name="expense_id"> 
+                <div class="form-row-3"> 
+                    <div class="field"><label>Fecha</label><input type="date" name="date" class="set-today" required></div> 
+                    <div class="field"><label>Tipo</label><select name="category" id="form-category-select" required></select></div> 
+                    <div class="field"><label>Monto €</label><input type="number" name="amount" step="0.01" required></div> 
+                </div> 
+                <div class="field"><label>Observaciones</label><input type="text" name="observations"></div> 
+                <button type="submit" class="btn-primary" style="width: 100%; margin-top:10px;">Registrar Gasto</button> 
+            </form> 
+ 
+            <div class="tab-filter-row"> 
+                <input type="date" id="f-expenses-start"> a <input type="date" id="f-expenses-end"> 
+                <select id="f-expenses-type"><option value="">Todas las Categorías</option></select> 
+            </div> 
+ 
+            <div class="table-responsive"> 
+                <table class="data-table small"> 
+                    <thead> 
+                        <tr> 
+                            <th class="sortable" onclick="setSort('expenses', 'date')">Fecha ↕</th> 
+                            <th class="sortable" onclick="setSort('expenses', 'category')">Categoría ↕</th> 
+                            <th class="sortable" onclick="setSort('expenses', 'amount')">Monto ↕</th> 
+                            <th style="min-width: 100px;">Acciones</th> 
+                        </tr> 
+                    </thead> 
+                    <tbody id="list-expenses-body"></tbody> 
+                </table> 
+            </div> 
+        </section> 
+ 
+        <section id="view-analysis" class="app-view"> 
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <button class="btn-primary" id="btn-show-matrix" style="width: auto;">Matriz de Resultados</button>
+                <button class="btn-secondary" id="btn-show-period" style="width: auto;">Análisis por Período</button>
+                <button class="btn-secondary" id="btn-show-cross" style="width: auto;">Explorador Cruzado</button>
+            </div>
+
+            <div style="overflow-x: auto;">
+                
+                <div class="tab-filter-row" style="margin-bottom:20px;"> 
+                    <input type="date" id="f-analysis-start"> a <input type="date" id="f-analysis-end"> 
+                    <select id="f-analysis-platform"><option value="">Canal...</option></select> 
+                    <select id="f-analysis-origin"><option value="">Origen...</option></select> 
+                </div> 
+
+                <!-- View: Matriz -->
+                <div id="analysis-v-matrix">
+                    <h2>Matriz de Resultados</h2>
+                    <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+                        <label>Año:</label>
+                        <select id="matrix-year-select" style="width: auto;">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <label>Seleccionar Variables (Y): </label>
+                        <select id="matrix-var-select" multiple style="height: 100px; width: 250px;">
+                            <option value="res_count" selected>Nº Reservas</option>
+                            <option value="nights" selected>Noches Ocupación</option>
+                            <option value="bruto" selected>Ingreso Bruto</option>
+                            <option value="net" selected>Ingreso Neto</option>
+                            <option value="expenses" selected>Gastos Totales</option>
+                            <option value="comisiones" selected>Comisiones (Canal + THL)</option>
+                        </select>
+                        <small>Presiona Ctrl/Cmd para seleccionar varias.</small>
+                    </div>
+                    <div class="table-responsive"> 
+                        <table class="data-table"> 
+                            <thead id="matrix-head"></thead> 
+                            <tbody id="matrix-body"></tbody> 
+                        </table> 
+                    </div> 
+                </div>
+
+                <!-- View: Periodo -->
+                <div id="analysis-v-period" class="hidden">
+                    <h2>Análisis por Período</h2>
+                    <div class="table-responsive"> 
+                        <table class="data-table"> 
+                            <thead> 
+                                <tr> 
+                                    <th class="sortable" onclick="setSort('analysis', 'month')">Mes ↕</th> 
+                                    <th class="sortable" onclick="setSort('analysis', 'nights')">Noches ↕</th> 
+                                    <th class="sortable" onclick="setSort('analysis', 'bruto')">Bruto ↕</th> 
+                                    <th class="sortable" onclick="setSort('analysis', 'net')">Neto ↕</th> 
+                                </tr> 
+                            </thead> 
+                            <tbody id="stats-table-body"></tbody> 
+                        </table> 
+                    </div> 
+                </div>
+
+                <!-- View: Cruzado -->
+                <div id="analysis-v-cross" class="hidden">
+                    <h2>Explorador Cruzado</h2>
+                    <div class="form-row-3" style="margin: 10px 0;"> 
+                        <select id="analysis-pivot-x"><option value="month">Mes</option><option value="origin">País Origen</option><option value="platform">Canal</option></select> 
+                        <select id="analysis-pivot-y"><option value="bruto">Ingreso Bruto</option><option value="net">Ingreso Neto</option><option value="count">Nº Reservas</option></select> 
+                    </div> 
+                    <div class="table-responsive">
+                        <table class="data-table"> 
+                            <tbody id="cross-analysis-body"></tbody> 
+                        </table> 
+                    </div>
+                </div>
+
+            </div>
+        </section> 
+ 
+        <section id="view-bank" class="app-view"> 
+            <div class="header-inline"> 
+                <h2>Bancos: Conciliación</h2> 
+                <div class="tab-filter-row" style="margin:0"> 
+                    <input type="date" id="f-bank-start"> a <input type="date" id="f-bank-end"> 
+                    <select id="f-bank-year" style="margin-left:10px;">
+                        <option value="">Cualquier Año</option>
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
+                        <option value="2023">2023</option>
+                    </select>
+                    <select id="f-bank-platform" style="margin-left:10px;">
+                        <option value="">Cualquier Canal</option>
+                    </select>
+                </div> 
+            </div> 
+            <div class="table-responsive"> 
+                <table class="data-table"> 
+                    <thead><tr><th>Reserva</th><th>Esperado (Neto)</th><th>Recibido</th><th>Diferencia</th><th>Observaciones</th></tr></thead> 
+                    <tbody id="bank-list-body"></tbody> 
+                </table> 
+            </div> 
+        </section> 
+ 
+        <section id="view-admin" class="app-view">
+            <h2>Panel Super Admin</h2>
+            <div class="card-grid-admin">
+                
+                <!-- Vincular Propiedad a Usuario -->
+                <div class="card">
+                    <h3 style="margin-bottom: 10px;">🔗 Vincular Propiedad a Usuario</h3>
+                    <form id="form-admin-link" style="display: flex; gap: 10px; align-items: flex-end;">
+                        <div class="field" style="flex: 1;">
+                            <label>Propiedad</label>
+                            <select id="admin-prop-select" required></select>
+                        </div>
+                        <div class="field" style="flex: 1;">
+                            <label>Email del Usuario</label>
+                            <input type="email" id="admin-user-email" placeholder="usuario@email.com" required>
+                        </div>
+                        <button type="submit" class="btn-primary" style="width: auto;">Vincular</button>
+                    </form>
+                </div>
+
+                <!-- Modificar Gastos / Canales -->
+                <div class="card">
+                    <h3 style="margin-bottom: 10px;">⚙️ Variables Globales</h3>
+                    <div style="display: flex; gap: 20px;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.8rem; font-weight: bold; display: block; margin-bottom: 5px;">Categorías de Gasto (separadas por coma)</label>
+                            <input type="text" id="admin-cat-input" style="width: 100%; margin-bottom: 5px;">
+                            <button id="btn-admin-save-cat" class="btn-secondary" style="width: 100%;">Guardar Categorías</button>
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.8rem; font-weight: bold; display: block; margin-bottom: 5px;">Canales de Reserva (separadas por coma)</label>
+                            <input type="text" id="admin-chan-input" style="width: 100%; margin-bottom: 5px;">
+                            <button id="btn-admin-save-chan" class="btn-secondary" style="width: 100%;">Guardar Canales</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Eliminar Propiedad -->
+                <div class="card" style="border-left-color: var(--danger);">
+                    <h3 style="margin-bottom: 10px; color: var(--danger);">⚠️ Eliminar Propiedad</h3>
+                    <p style="font-size: 0.8rem; margin-bottom: 10px;">Elimina permanentemente la propiedad seleccionada arriba y todos sus datos.</p>
+                    <button id="btn-admin-delete-prop" class="btn-primary" style="background: var(--danger);">Eliminar Propiedad Activa</button>
+                </div>
+                
+                <!-- Gestionar Usuarios -->
+                <div class="card" style="border-left-color: var(--warning);">
+                    <h3 style="margin-bottom: 10px; color: var(--warning);">👥 Gestión de Usuarios</h3>
+                    <div class="table-responsive">
+                        <table class="data-table small">
+                            <thead><tr><th>ID</th><th>Email</th><th>Acciones</th></tr></thead>
+                            <tbody id="admin-users-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <section id="view-market" class="app-view"> 
+            <h2>Comparativa de Mercado</h2> 
+            <div class="card-grid" id="market-cards-container" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 20px;"></div> 
+            
+            <div class="card" style="padding: 0; overflow: hidden; position: relative;">
+                <div style="padding: 15px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0;">📍 Mapa de Competencia Local</h3>
+                    <div style="font-size: 0.8rem; display:flex; gap: 10px;">
+                        <span style="color: blue;">● Tu Propiedad</span>
+                        <span style="color: red;">● Turístico</span>
+                        <span style="color: orange;">● Temporal</span>
+                        <span style="color: green;">● Permanente</span>
+                    </div>
+                </div>
+                <div id="map" style="height: 400px; width: 100%;"></div>
+            </div>
+            <div class="card" style="margin-top:20px; text-align:center;"> 
+                <p id="market-status-box">Cargando datos del activo...</p> 
+            </div> 
+        </section> 
+ 
+    </main> 
+ 
+    <button id="btn-open-import" class="btn-secondary" style="position:fixed; bottom:20px; right:20px; border-radius:50px;"><i class="fa fa-upload"></i> Importar CSV</button> 
+ 
+    <script type="module" src="js/app.js"></script> 
+</body> 
+</html> 

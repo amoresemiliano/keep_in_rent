@@ -1,0 +1,8 @@
+# Dependencias (Se regeneran con npm install)
+node_modules/
+dist/
+.env
+
+# Archivos del sistema u otros temporales
+.DS_Store
+npm-debug.log*clear
