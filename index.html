@@ -225,16 +225,14 @@
             </div> 
         </section> 
  
-        <section id="view-analysis" class="app-view analysis-container"> 
-            <!-- Sidebar for Analysis Type -->
-            <div style="width: 200px; background: white; border-right: 1px solid #e2e8f0; padding: 15px; display: flex; flex-direction: column; gap: 10px;">
-                <button class="btn-primary" id="btn-show-matrix" style="text-align:left; background: var(--accent);">Matriz de Resultados</button>
-                <button class="btn-secondary" id="btn-show-period" style="text-align:left; border: none;">Análisis por Período</button>
-                <button class="btn-secondary" id="btn-show-cross" style="text-align:left; border: none;">Explorador Cruzado</button>
+        <section id="view-analysis" class="app-view">
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <button class="btn-primary" id="btn-show-matrix" style="width: auto;">Matriz de Resultados</button>
+                <button class="btn-secondary" id="btn-show-period" style="width: auto;">Análisis por Período</button>
+                <button class="btn-secondary" id="btn-show-cross" style="width: auto;">Explorador Cruzado</button>
             </div>
 
-            <!-- Main Content Area -->
-            <div style="flex: 1; padding: 15px; overflow-x: auto;">
+            <div style="overflow-x: auto;">
                 
                 <div class="tab-filter-row" style="margin-bottom:20px;"> 
                     <input type="date" id="f-analysis-start"> a <input type="date" id="f-analysis-end"> 
@@ -245,6 +243,12 @@
                 <!-- View: Matriz -->
                 <div id="analysis-v-matrix">
                     <h2>Matriz de Resultados</h2>
+                    <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+                        <label>Año:</label>
+                        <select id="matrix-year-select" style="width: auto;">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
                     <div style="margin-bottom: 10px;">
                         <label>Seleccionar Variables (Y): </label>
                         <select id="matrix-var-select" multiple style="height: 100px; width: 250px;">
@@ -326,10 +330,10 @@
  
         <section id="view-admin" class="app-view">
             <h2>Panel Super Admin</h2>
-            <div class="card-grid">
+            <div class="card-grid-admin">
 
                 <!-- Vincular Propiedad a Usuario -->
-                <div class="card" style="grid-column: span 2;">
+                <div class="card">
                     <h3 style="margin-bottom: 10px;">🔗 Vincular Propiedad a Usuario</h3>
                     <form id="form-admin-link" style="display: flex; gap: 10px; align-items: flex-end;">
                         <div class="field" style="flex: 1;">
@@ -345,16 +349,16 @@
                 </div>
 
                 <!-- Modificar Gastos / Canales -->
-                <div class="card" style="grid-column: span 2;">
+                <div class="card">
                     <h3 style="margin-bottom: 10px;">⚙️ Variables Globales</h3>
                     <div style="display: flex; gap: 20px;">
                         <div style="flex: 1;">
-                            <label style="font-size: 0.8rem; font-weight: bold;">Categorías de Gasto (separadas por coma)</label>
+                            <label style="font-size: 0.8rem; font-weight: bold; display: block; margin-bottom: 5px;">Categorías de Gasto (separadas por coma)</label>
                             <input type="text" id="admin-cat-input" style="width: 100%; margin-bottom: 5px;">
                             <button id="btn-admin-save-cat" class="btn-secondary" style="width: 100%;">Guardar Categorías</button>
                         </div>
                         <div style="flex: 1;">
-                            <label style="font-size: 0.8rem; font-weight: bold;">Canales de Reserva (separados por coma)</label>
+                            <label style="font-size: 0.8rem; font-weight: bold; display: block; margin-bottom: 5px;">Canales de Reserva (separadas por coma)</label>
                             <input type="text" id="admin-chan-input" style="width: 100%; margin-bottom: 5px;">
                             <button id="btn-admin-save-chan" class="btn-secondary" style="width: 100%;">Guardar Canales</button>
                         </div>
@@ -369,7 +373,7 @@
                 </div>
 
                 <!-- Gestionar Usuarios -->
-                <div class="card" style="grid-column: span 2; border-left-color: var(--warning);">
+                <div class="card" style="border-left-color: var(--warning);">
                     <h3 style="margin-bottom: 10px; color: var(--warning);">👥 Gestión de Usuarios</h3>
                     <div class="table-responsive">
                         <table class="data-table small">

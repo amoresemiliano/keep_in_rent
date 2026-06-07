@@ -493,6 +493,7 @@ class UI {
         document.getElementById('analysis-pivot-y').onchange = () => this.renderAnalysis(); 
         
         document.getElementById('matrix-var-select').onchange = () => this.renderAnalysis();
+        document.getElementById('matrix-year-select').onchange = () => this.renderAnalysis();
 
         const analysisNav = (targetId, btnId) => {
             ['matrix', 'period', 'cross'].forEach(v => {
@@ -928,7 +929,33 @@ class UI {
             <tr><td>${x.month}</td><td>${x.nights}</td><td>${x.bruto.toFixed(2)}€</td><td class="text-success">${x.net.toFixed(2)}€</td></tr> 
         `).join(''); 
  
-        // Render Matrix
+        // Render Matrix Setup
+        const yearSelect = document.getElementById('matrix-year-select');
+        const currentYear = new Date().getFullYear();
+        let selectedYear = yearSelect ? yearSelect.value : currentYear.toString();
+
+        // Populate year selector
+        if (yearSelect) {
+            const years = new Set();
+            b.forEach(x => years.add(x.checkin.substring(0, 4)));
+            e.forEach(x => years.add(x.date.substring(0, 4)));
+            if (years.size === 0) years.add(currentYear.toString());
+
+            const sortedYears = Array.from(years).sort().reverse();
+
+            // Check if we need to update options to avoid destroying current selection unless necessary
+            const currentOptions = Array.from(yearSelect.options).map(o => o.value);
+            const needsUpdate = currentOptions.join(',') !== sortedYears.join(',');
+
+            if (needsUpdate || yearSelect.options.length === 0) {
+                yearSelect.innerHTML = sortedYears.map(y => `<option value="${y}" ${y === selectedYear ? 'selected' : ''}>${y}</option>`).join('');
+                if (!sortedYears.includes(selectedYear)) {
+                     selectedYear = sortedYears[0]; // Reset to newest year if previous selection is invalid
+                }
+            }
+            selectedYear = yearSelect.value || currentYear.toString();
+        }
+
         const selObj = document.getElementById('matrix-var-select');
         let selectedVars = [];
         if(selObj && selObj.options) {
@@ -946,14 +973,25 @@ class UI {
             comisiones: "Comisiones (€)"
         };
 
-        const headHtml = '<tr><th>Variables</th>' + data.map(x => `<th>${x.month}</th>`).join('') + '</tr>';
+        const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+        const matrixData = [];
+        for (let i = 1; i <= 12; i++) {
+            const monthStr = i.toString().padStart(2, '0');
+            const key = `${selectedYear}-${monthStr}`;
+            matrixData.push({
+                label: monthNames[i-1],
+                data: months[key] || { res_count: 0, nights: 0, bruto: 0, net: 0, comisiones: 0, expenses: 0 }
+            });
+        }
+
+        const headHtml = '<tr><th>Variables</th>' + matrixData.map(x => `<th>${x.label}</th>`).join('') + '</tr>';
         document.getElementById('matrix-head').innerHTML = headHtml;
 
         let bodyHtml = '';
         selectedVars.forEach(v => {
             bodyHtml += `<tr><td><b>${varLabels[v]}</b></td>`;
-            data.forEach(x => {
-                let val = x[v];
+            matrixData.forEach(x => {
+                let val = x.data[v];
                 let displayVal = (v === 'res_count' || v === 'nights') ? val : val.toFixed(2);
                 bodyHtml += `<td>${displayVal}</td>`;
             });
@@ -1076,8 +1114,8 @@ window.delB = async (id) => { if(confirm("¿Eliminar reserva?")) { await app.sta
 window.editB = (id) => {
     const x = app.state.bookings.find(b => b.id == id);
     const f = document.getElementById('form-booking');
-    Object.keys(x).forEach(k => { if(f[k]) f[k].value = x[k]; });
-    f['booking_id'].value = id; // Asegurar que el ID se pasa al hidden input
+    Object.keys(x).forEach(k => { if(f.elements[k]) f.elements[k].value = x[k]; });
+    f.elements['booking_id'].value = id; // Asegurar que el ID se pasa al hidden input
     document.querySelector('button[data-target="view-bookings"]').click();
     window.scrollTo(0,0);
 };
@@ -1090,8 +1128,8 @@ window.delE = async (id) => { if(confirm("¿Eliminar gasto?")) { await app.state
 window.editE = (id) => {
     const x = app.state.expenses.find(e => e.id == id);
     const f = document.getElementById('form-expense');
-    Object.keys(x).forEach(k => { if(f[k]) f[k].value = x[k]; });
-    f['expense_id'].value = id; // Asegurar que el ID se pasa al hidden input
+    Object.keys(x).forEach(k => { if(f.elements[k]) f.elements[k].value = x[k]; });
+    f.elements['expense_id'].value = id; // Asegurar que el ID se pasa al hidden input
     document.querySelector('button[data-target="view-expenses"]').click();
     window.scrollTo(0,0);
 };
