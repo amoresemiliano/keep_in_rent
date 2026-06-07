@@ -36,7 +36,9 @@ if (file_exists($envPath)) {
         if ($name === 'FIREBASE_MEASUREMENT_ID' || $name === 'VITE_FIREBASE_MEASUREMENT_ID') $config['measurementId'] = $value;
     }
 } else {
-    // Fallback logic could go here or return error
+    http_response_code(404);
+    echo json_encode(["error" => "No .env file found"]);
+    exit;
 }
 
 echo json_encode($config);
