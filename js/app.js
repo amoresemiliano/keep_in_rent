@@ -1,13 +1,19 @@
+import { loginWithGoogle, logout } from "./authService.js";
+import { auth, onAuthStateChanged } from "./firebaseApp.js";
+
 // --- 1. CONFIGURACIÓN --- 
 const MONTHS_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]; 
 const COUNTRIES = ["España", "Francia", "Alemania", "Reino Unido", "Italia", "USA", "México", "Argentina", "Brasil", "Portugal", "Otros"].sort(); 
- 
+
+// --- API CONFIG ---
+const API_URL = 'api.php'; // Cambiar a la URL absoluta si está alojado en otro lugar (ej: https://tudominio.com/api.php)
+
 // --- 2. ESTADO --- 
 class AppState { 
     constructor() { 
-        this.currentUser = localStorage.getItem('keepinrent_user') || null;
+        this.currentUser = null;
         this.currentActiveId = localStorage.getItem('last_active_id') || null; 
-        this.properties = JSON.parse(localStorage.getItem('keepinrent_properties')) || [];
+        this.properties = [];
         this.config = null; 
         this.bookings = []; 
         this.expenses = []; 
@@ -19,66 +25,211 @@ class AppState {
             analysis: { start: '2025-01-01', end: '2025-12-31', platform: '', origin: '' }, 
             bank: { start: '2025-01-01', end: '2025-12-31', year: '', platform: '' } 
         }; 
-        if(this.currentActiveId && this.currentUser) this.loadActiveData(this.currentActiveId); 
     } 
 
-    login(email) {
-        this.currentUser = email;
-        localStorage.setItem('keepinrent_user', email);
+    async loginWithGoogle() {
+        const user = await loginWithGoogle();
+        if (user) {
+            this.currentUser = user.email;
+        }
     }
     
-    logout() {
+    async logout() {
+        await logout();
         this.currentUser = null;
         this.currentActiveId = null;
         this.config = null;
-        localStorage.removeItem('keepinrent_user');
         localStorage.removeItem('last_active_id');
     }
 
-    addProperty(data) {
-        const id = btoa(data.calle + data.cp);
-        const prop = { id, owner: this.currentUser, ...data };
-        
-        if (!this.properties.find(p => p.id === id)) {
-            this.properties.push(prop);
-            localStorage.setItem('keepinrent_properties', JSON.stringify(this.properties));
-        }
-        
-        this.loadActiveData(id);
-        this.config = prop;
-        this.save();
+    async loadUserProperties() {
+        if (!this.currentUser) return;
+        try {
+            const token = await auth.currentUser.getIdToken();
+
+            // Load global settings
+            const settingsRes = await fetch(`${API_URL}?action=get_settings`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            this.globalSettings = await settingsRes.json();
+
+            // Load properties
+            const res = await fetch(`${API_URL}?action=get_properties`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            this.properties = await res.json();
+
+            if (this.currentActiveId && this.properties.find(p => p.id == this.currentActiveId)) {
+                await this.loadActiveData(this.currentActiveId);
+            } else if (this.properties.length > 0) {
+                await this.loadActiveData(this.properties[0].id);
+            } else {
+                this.config = null;
+            }
+        } catch (e) { console.error("Error loading properties:", e); }
+    }
+
+    async adminLinkProperty(property_id, target_email) {
+        try {
+            const token = await auth.currentUser.getIdToken();
+            await fetch(`${API_URL}?action=admin_link_property`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ property_id, target_email })
+            });
+            alert('Propiedad vinculada correctamente.');
+        } catch (e) { console.error(e); }
+    }
+
+    async adminUpdateSettings(key, value) {
+        try {
+            const token = await auth.currentUser.getIdToken();
+            await fetch(`${API_URL}?action=admin_update_settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ key, value })
+            });
+            alert('Ajustes guardados.');
+            await this.loadUserProperties();
+        } catch (e) { console.error(e); }
+    }
+
+    async adminDeleteProperty(property_id) {
+        try {
+            const token = await auth.currentUser.getIdToken();
+            await fetch(`${API_URL}?action=admin_delete_property`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ property_id })
+            });
+            alert('Propiedad eliminada.');
+            this.currentActiveId = null;
+            await this.loadUserProperties();
+        } catch (e) { console.error(e); }
+    }
+
+    async adminGetUsers() {
+        try {
+            const token = await auth.currentUser.getIdToken();
+            const res = await fetch(`${API_URL}?action=admin_get_users`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            return await res.json();
+        } catch (e) { console.error(e); return []; }
+    }
+
+    async adminDeleteUser(user_id) {
+        try {
+            const token = await auth.currentUser.getIdToken();
+            await fetch(`${API_URL}?action=admin_delete_user`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ user_id })
+            });
+            alert('Usuario eliminado.');
+        } catch (e) { console.error(e); }
+    }
+
+    async addProperty(data) {
+        try {
+            const token = await auth.currentUser.getIdToken();
+            const res = await fetch(`${API_URL}?action=add_property`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.id) {
+                await this.loadUserProperties();
+                await this.loadActiveData(result.id);
+            }
+        } catch (e) { console.error("Error adding property:", e); }
     }
  
-    loadActiveData(id) { 
+    async loadActiveData(id) {
         this.currentActiveId = id; 
         localStorage.setItem('last_active_id', id); 
-        this.config = JSON.parse(localStorage.getItem(`conf_${id}`)) || null; 
-        this.bookings = JSON.parse(localStorage.getItem(`res_${id}`)) || []; 
-        this.expenses = JSON.parse(localStorage.getItem(`gas_${id}`)) || []; 
-        this.bankRecords = JSON.parse(localStorage.getItem(`bnk_${id}`)) || []; 
+        this.config = this.properties.find(p => p.id == id) || null;
+
+        try {
+            const token = await auth.currentUser.getIdToken();
+            const res = await fetch(`${API_URL}?action=get_data&property_id=${id}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            this.bookings = data.bookings || [];
+            this.expenses = data.expenses || [];
+            this.bankRecords = data.bank_records || [];
+        } catch (e) { console.error("Error loading property data:", e); }
     } 
  
-    save() { 
-        const id = this.currentActiveId; 
-        localStorage.setItem(`conf_${id}`, JSON.stringify(this.config)); 
-        localStorage.setItem(`res_${id}`, JSON.stringify(this.bookings)); 
-        localStorage.setItem(`gas_${id}`, JSON.stringify(this.expenses)); 
-        localStorage.setItem(`bnk_${id}`, JSON.stringify(this.bankRecords)); 
-    } 
- 
-    addBooking(data) { 
+    async addBooking(data) {
         const net = parseFloat(data.bruto) - (parseFloat(data.fee_banco)||0) - (parseFloat(data.fee_thl)||0) - (parseFloat(data.limpieza)||0); 
         const nights = Math.max(1, (new Date(data.checkout) - new Date(data.checkin)) / 86400000); 
-        if(data.booking_id) this.bookings = this.bookings.map(b => b.id == data.booking_id ? {...data, net, nights, id: b.id} : b); 
-        else this.bookings.push({...data, net, nights, id: Date.now()}); 
-        this.save(); 
+        const payload = { ...data, net, nights, property_id: this.currentActiveId, id: data.booking_id };
+
+        try {
+            const token = await auth.currentUser.getIdToken();
+            await fetch(`${API_URL}?action=save_booking`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(payload)
+            });
+            await this.loadActiveData(this.currentActiveId);
+        } catch (e) { console.error(e); }
     } 
  
-    addExpense(data) { 
-        if(data.expense_id) this.expenses = this.expenses.map(e => e.id == data.expense_id ? {...data, id: e.id} : e); 
-        else this.expenses.push({...data, id: Date.now()}); 
-        this.save(); 
+    async addExpense(data) {
+        const payload = { ...data, property_id: this.currentActiveId, id: data.expense_id };
+        try {
+            const token = await auth.currentUser.getIdToken();
+            await fetch(`${API_URL}?action=save_expense`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(payload)
+            });
+            await this.loadActiveData(this.currentActiveId);
+        } catch (e) { console.error(e); }
     } 
+
+    async deleteRecord(type, id) {
+        try {
+            const token = await auth.currentUser.getIdToken();
+            await fetch(`${API_URL}?action=delete_${type}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ id, property_id: this.currentActiveId })
+            });
+            await this.loadActiveData(this.currentActiveId);
+        } catch (e) { console.error(e); }
+    }
+
+    async updateBank(booking_id, val, obs) {
+        try {
+            const token = await auth.currentUser.getIdToken();
+            await fetch(`${API_URL}?action=save_bank`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ property_id: this.currentActiveId, booking_id, val, obs })
+            });
+            await this.loadActiveData(this.currentActiveId);
+        } catch (e) { console.error(e); }
+    }
 } 
  
 // --- 3. UI --- 
@@ -103,6 +254,62 @@ class UI {
             if(el) el.innerHTML += h; 
         }); 
     } 
+
+    renderDynamicSelects() {
+        if(!this.state.globalSettings) return;
+
+        const cats = this.state.globalSettings.expense_categories || [];
+        const chans = this.state.globalSettings.booking_platforms || [];
+
+        const catHtml = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+        const chanHtml = chans.map(c => `<option value="${c}">${c}</option>`).join('');
+
+        const updateSelect = (id, html, defaultOption = '') => {
+            const el = document.getElementById(id);
+            if(el) {
+                const val = el.value;
+                el.innerHTML = defaultOption + html;
+                if (val) el.value = val;
+            }
+        };
+
+        // Expenses categories
+        updateSelect('form-category-select', catHtml);
+        updateSelect('f-expenses-type', catHtml, '<option value="">Todos los Tipos</option>');
+
+        // Platforms / Channels
+        updateSelect('form-platform-select', chanHtml);
+        updateSelect('f-bookings-platform', chanHtml, '<option value="">Todos los Canales</option>');
+        updateSelect('f-analysis-platform', chanHtml, '<option value="">Canal...</option>');
+        updateSelect('f-bank-platform', chanHtml, '<option value="">Cualquier Canal</option>');
+
+        // Populate Admin Inputs if admin
+        if (this.state.currentUser === 'vegendigital@gmail.com') {
+            document.getElementById('admin-cat-input').value = cats.join(', ');
+            document.getElementById('admin-chan-input').value = chans.join(', ');
+
+            updateSelect('admin-prop-select',
+                this.state.properties.map(p => `<option value="${p.id}">${p.calle} (Owner: ${p.owner_email || 'You'})</option>`).join(''),
+                '<option value="">Seleccionar Propiedad...</option>'
+            );
+
+            // Populate Users Table
+            this.state.adminGetUsers().then(users => {
+                const tbody = document.getElementById('admin-users-body');
+                if (tbody) {
+                    tbody.innerHTML = users.map(u => `
+                        <tr>
+                            <td>${u.id}</td>
+                            <td>${u.email}</td>
+                            <td>
+                                ${u.email !== 'vegendigital@gmail.com' ? `<button class="icon-btn" onclick="window.delUser(${u.id})" title="Eliminar Usuario"><i class="fa fa-trash text-danger"></i></button>` : ''}
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            });
+        }
+    }
  
     bindEvents() { 
         document.querySelectorAll('.nav-btn').forEach(b => b.onclick = () => { 
@@ -160,23 +367,97 @@ class UI {
         document.getElementById('f-bank-year').onchange = (e) => { this.state.filters.bank.year = e.target.value; this.renderAll(); };
         document.getElementById('f-bank-platform').onchange = (e) => { this.state.filters.bank.platform = e.target.value; this.renderAll(); }; 
  
-        document.getElementById('form-booking').onsubmit = (e) => { e.preventDefault(); this.state.addBooking(Object.fromEntries(new FormData(e.target))); e.target.reset(); this.renderAll(); }; 
-        document.getElementById('form-expense').onsubmit = (e) => { e.preventDefault(); this.state.addExpense(Object.fromEntries(new FormData(e.target))); e.target.reset(); this.renderAll(); }; 
- 
-        document.getElementById('login-form').onsubmit = (e) => {
+        document.getElementById('form-booking').onsubmit = async (e) => { e.preventDefault(); await this.state.addBooking(Object.fromEntries(new FormData(e.target))); e.target.reset(); this.renderAll(); };
+        document.getElementById('form-expense').onsubmit = async (e) => { e.preventDefault(); await this.state.addExpense(Object.fromEntries(new FormData(e.target))); e.target.reset(); this.renderAll(); };
+
+        // Admin Events
+        document.getElementById('form-admin-link').onsubmit = async (e) => {
             e.preventDefault();
-            const email = document.getElementById('login-email').value;
-            this.state.login(email);
-            const lm = document.getElementById('login-modal');
-            lm.classList.add('hidden');
-            lm.style.display = 'none';
+            const propId = document.getElementById('admin-prop-select').value;
+            const targetEmail = document.getElementById('admin-user-email').value;
+            if(propId && targetEmail) {
+                await this.state.adminLinkProperty(propId, targetEmail);
+                e.target.reset();
+            }
+        };
+
+        document.getElementById('btn-admin-save-cat').onclick = async () => {
+            const val = document.getElementById('admin-cat-input').value.split(',').map(s => s.trim()).filter(s => s);
+            await this.state.adminUpdateSettings('expense_categories', val);
             this.renderAll();
         };
 
-        document.getElementById('btn-logout').onclick = () => {
-            this.state.logout();
-            location.reload();
+        document.getElementById('btn-admin-save-chan').onclick = async () => {
+            const val = document.getElementById('admin-chan-input').value.split(',').map(s => s.trim()).filter(s => s);
+            await this.state.adminUpdateSettings('booking_platforms', val);
+            this.renderAll();
         };
+
+        document.getElementById('btn-admin-delete-prop').onclick = async () => {
+            if(this.state.currentActiveId && confirm("⚠️ ATENCIÓN ⚠️\n¿Estás seguro que deseas ELIMINAR PERMANENTEMENTE esta propiedad y todos sus datos? Esta acción no se puede deshacer.")) {
+                await this.state.adminDeleteProperty(this.state.currentActiveId);
+                this.renderAll();
+            }
+        };
+
+        const btnGoogleLogin = document.getElementById('btn-google-login');
+        if (btnGoogleLogin) {
+            btnGoogleLogin.onclick = async () => {
+                try {
+                    btnGoogleLogin.disabled = true;
+                    const origHtml = btnGoogleLogin.innerHTML;
+                    btnGoogleLogin.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Cargando Google...';
+
+                    await this.state.loginWithGoogle();
+
+                    if (!this.state.currentUser) {
+                        btnGoogleLogin.disabled = false;
+                        btnGoogleLogin.innerHTML = origHtml;
+                    }
+                } catch (error) {
+                    console.error(error);
+                    btnGoogleLogin.disabled = false;
+                    btnGoogleLogin.innerHTML = '<img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" style="width: 20px;"> Continuar con Google';
+                }
+            };
+        }
+
+        onAuthStateChanged(auth, async user => {
+            if (user) {
+                this.state.currentUser = user.email;
+
+                // Hide login modal
+                const lm = document.getElementById('login-modal');
+                if(lm) {
+                    lm.classList.add('hidden');
+                    lm.style.display = 'none';
+                }
+
+                if (user.email === 'vegendigital@gmail.com') {
+                    const btnAdmin = document.getElementById('nav-btn-admin');
+                    if(btnAdmin) btnAdmin.classList.remove('hidden');
+                }
+
+                await this.state.loadUserProperties();
+                this.renderAll();
+            } else {
+                this.state.currentUser = null;
+                const lm = document.getElementById('login-modal');
+                if(lm) {
+                    lm.classList.remove('hidden');
+                    lm.style.display = 'flex';
+                }
+                this.renderAll();
+            }
+        });
+
+        const btnLogout = document.getElementById('btn-logout');
+        if (btnLogout) {
+            btnLogout.onclick = async () => {
+                await this.state.logout();
+                location.reload();
+            };
+        }
 
         document.getElementById('btn-add-property').onclick = () => {
             const sm = document.getElementById('setup-modal');
@@ -191,17 +472,50 @@ class UI {
             sm.style.display = 'none';
         };
 
-        document.getElementById('property-selector').onchange = (e) => {
+        document.getElementById('property-selector').onchange = async (e) => {
             if(e.target.value) {
-                this.state.loadActiveData(e.target.value);
+                await this.state.loadActiveData(e.target.value);
                 this.renderAll();
             }
         };
 
-        document.getElementById('setup-form').onsubmit = (e) => { 
+        let customFeatures = [];
+        document.getElementById('btn-add-feature').onclick = () => {
+            const input = document.getElementById('custom-feature-name');
+            const val = input.value.trim();
+            if(val && !customFeatures.includes(val)) {
+                customFeatures.push(val);
+                input.value = '';
+
+                const container = document.getElementById('custom-features-container');
+                const badge = document.createElement('div');
+                badge.style.cssText = "display: inline-flex; align-items: center; background: #e2e8f0; padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; margin: 0 5px 5px 0;";
+                badge.innerHTML = `<span>${val}</span> <button type="button" style="background:none; border:none; margin-left:5px; color:#f43f5e; cursor:pointer;" onclick="this.parentElement.remove(); customFeatures = customFeatures.filter(f => f !== '${val}');"><i class="fa fa-times"></i></button>`;
+                container.appendChild(badge);
+            }
+        };
+
+        document.getElementById('setup-form').onsubmit = async (e) => {
             e.preventDefault(); 
-            const d = Object.fromEntries(new FormData(e.target)); 
-            this.state.addProperty(d); 
+            const formData = new FormData(e.target);
+            const d = Object.fromEntries(formData);
+
+            // Checkboxes might not be in formData if not checked, let's normalize
+            d.piscina = formData.get('piscina') ? 1 : 0;
+            d.cochera = formData.get('cochera') ? 1 : 0;
+            d.balcon = formData.get('balcon') ? 1 : 0;
+            d.ascensor = formData.get('ascensor') ? 1 : 0;
+
+            // Add custom features as JSON string
+            d.custom_features = JSON.stringify(customFeatures);
+
+            await this.state.addProperty(d);
+
+            // Reset modal state
+            document.getElementById('custom-features-container').innerHTML = '';
+            customFeatures = [];
+            e.target.reset();
+
             const sm = document.getElementById('setup-modal');
             sm.classList.add('hidden');
             sm.style.display = 'none';
@@ -212,6 +526,7 @@ class UI {
         document.getElementById('analysis-pivot-y').onchange = () => this.renderAnalysis(); 
         
         document.getElementById('matrix-var-select').onchange = () => this.renderAnalysis();
+        document.getElementById('matrix-year-select').onchange = () => this.renderAnalysis();
 
         const analysisNav = (targetId, btnId) => {
             ['matrix', 'period', 'cross'].forEach(v => {
@@ -245,56 +560,81 @@ class UI {
         analysisNav('matrix', 'btn-show-matrix');
         
 
-        // Import Import logic
+        // Import logic
         document.getElementById('btn-open-import').onclick = () => document.getElementById('import-modal').classList.remove('hidden');
         document.getElementById('close-import').onclick = () => document.getElementById('import-modal').classList.add('hidden');
 
         document.getElementById('import-form').onsubmit = async (e) => {
             e.preventDefault();
             const clear = document.getElementById('clear-existing').checked;
-            if(clear) {
-                this.state.bookings = [];
-                this.state.expenses = [];
-                this.state.bankRecords = [];
-            }
             
             const fileB = document.getElementById('file-bookings').files[0];
             const fileE = document.getElementById('file-expenses').files[0];
             
+            const importPayload = {
+                property_id: this.state.currentActiveId,
+                clear_existing: clear,
+                bookings: [],
+                expenses: []
+            };
+
             const promises = [];
-            if(fileB) promises.push(this.processCSV(fileB, 'bookings'));
-            if(fileE) promises.push(this.processCSV(fileE, 'expenses'));
+            if(fileB) promises.push(this.processCSV(fileB, 'bookings', importPayload.bookings));
+            if(fileE) promises.push(this.processCSV(fileE, 'expenses', importPayload.expenses));
 
             await Promise.all(promises);
 
-            // Auto-adjust filters to imported data range
-            const allDates = [
-                ...this.state.bookings.map(b => b.checkin),
-                ...this.state.expenses.map(e => e.date)
-            ].filter(d => d).sort();
-
-            if (allDates.length > 0) {
-                const start = allDates[0];
-                const end = allDates[allDates.length - 1];
-                
-                ['dashboard', 'bookings', 'expenses', 'analysis', 'bank'].forEach(v => {
-                    this.state.filters[v].start = start;
-                    this.state.filters[v].end = end;
-                    const s = document.getElementById(`f-${v}-start`);
-                    const e = document.getElementById(`f-${v}-end`);
-                    if(s) s.value = start;
-                    if(e) e.value = end;
+            try {
+                const token = await auth.currentUser.getIdToken();
+                const res = await fetch(`${API_URL}?action=import_data`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(importPayload)
                 });
+
+                const result = await res.json();
+                if(result.status === 'success') {
+                    await this.state.loadActiveData(this.state.currentActiveId);
+
+                    // Auto-adjust filters to imported data range
+                    const allDates = [
+                        ...this.state.bookings.map(b => b.checkin),
+                        ...this.state.expenses.map(exp => exp.date)
+                    ].filter(d => d).sort();
+
+                    if (allDates.length > 0) {
+                        const start = allDates[0];
+                        const end = allDates[allDates.length - 1];
+
+                        ['dashboard', 'bookings', 'expenses', 'analysis', 'bank'].forEach(v => {
+                            this.state.filters[v].start = start;
+                            this.state.filters[v].end = end;
+                            const s = document.getElementById(`f-${v}-start`);
+                            const e = document.getElementById(`f-${v}-end`);
+                            if(s) s.value = start;
+                            if(e) e.value = end;
+                        });
+                    }
+
+                    alert('Importación completada con éxito.');
+                } else {
+                    alert('Error en la importación: ' + result.error);
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Error de conexión al importar.');
             }
-            
-            alert('Importación completada con éxito.');
+
             document.getElementById('import-modal').classList.add('hidden');
             e.target.reset();
             this.renderAll();
         };
     } 
 
-    processCSV(file, type) {
+    processCSV(file, type, targetArray) {
         return new Promise((resolve) => {
             const reader = new FileReader();
             reader.onload = (e) => {
@@ -392,18 +732,32 @@ class UI {
                     }
 
                     if (type === 'bookings') {
+                        const bruto = parseEur(getVal(cols, map.bruto));
+                        const fee_banco = parseEur(getVal(cols, map.fee_chan));
+                        const fee_thl = parseEur(getVal(cols, map.fee_thl));
+                        const limpieza = parseEur(getVal(cols, map.clean));
+                        const checkin = parseDate(getVal(cols, map.checkin));
+                        const checkout = parseDate(getVal(cols, map.checkout));
+
+                        const net = bruto - (fee_banco||0) - (fee_thl||0) - (limpieza||0);
+                        const cInDate = new Date(checkin);
+                        const cOutDate = new Date(checkout);
+                        const nights = isNaN(cInDate) || isNaN(cOutDate) ? 1 : Math.max(1, (cOutDate - cInDate) / 86400000);
+
                         const booking = {
                             booking_ref: getVal(cols, map.ref) || 'CSV-'+Date.now(),
                             platform: getVal(cols, map.platform) || 'Directo',
                             origin: getVal(cols, map.origin) || 'Otros',
-                            checkin: parseDate(getVal(cols, map.checkin)),
-                            checkout: parseDate(getVal(cols, map.checkout)),
-                            bruto: parseEur(getVal(cols, map.bruto)),
-                            fee_banco: parseEur(getVal(cols, map.fee_chan)),
-                            fee_thl: parseEur(getVal(cols, map.fee_thl)),
-                            limpieza: parseEur(getVal(cols, map.clean))
+                            checkin: checkin,
+                            checkout: checkout,
+                            bruto: bruto,
+                            fee_banco: fee_banco,
+                            fee_thl: fee_thl,
+                            limpieza: limpieza,
+                            net: net,
+                            nights: nights
                         };
-                        if(booking.checkin && booking.bruto) this.state.addBooking(booking);
+                        if(booking.checkin && booking.bruto) targetArray.push(booking);
                     } else {
                         const prov = getVal(cols, map.prov);
                         const obs = getVal(cols, map.obs);
@@ -426,7 +780,7 @@ class UI {
                             amount: parseEur(getVal(cols, map.amount)),
                             observations: fullObs
                         };
-                        if(expense.date && expense.amount) this.state.addExpense(expense);
+                        if(expense.date && expense.amount) targetArray.push(expense);
                     }
                 });
                 resolve();
@@ -452,22 +806,36 @@ class UI {
             loginModal.style.display = 'none';
         }
 
-        const userProps = this.state.properties.filter(p => p.owner === this.state.currentUser);
-        
         const sel = document.getElementById('property-selector');
         sel.innerHTML = '<option value="">Seleccionar Propiedad...</option>' + 
-            userProps.map(p => `<option value="${p.id}" ${p.id === this.state.currentActiveId ? 'selected' : ''}>${p.calle}</option>`).join('');
+            this.state.properties.map(p => `<option value="${p.id}" ${p.id == this.state.currentActiveId ? 'selected' : ''}>${p.calle}</option>`).join('');
+
+        if (this.state.currentUser === 'vegendigital@gmail.com') {
+            document.getElementById('nav-btn-admin').classList.remove('hidden');
+        } else {
+            document.getElementById('nav-btn-admin').classList.add('hidden');
+        }
+
+        this.renderDynamicSelects();
 
         if(!this.state.config || !this.state.currentActiveId) { 
-            if (userProps.length > 0) {
-                this.state.loadActiveData(userProps[0].id);
-                sel.value = userProps[0].id;
+            if (this.state.properties.length > 0) {
+                this.state.loadActiveData(this.state.properties[0].id).then(() => {
+                    sel.value = this.state.properties[0].id;
+                    this.renderDashboard();
+                    this.renderBookings();
+                    this.renderExpenses();
+                    this.renderAnalysis();
+                    this.renderBank();
+                });
             } else {
-                setupModal.classList.remove('hidden'); 
-                setupModal.style.display = 'flex';
-                document.getElementById('close-setup').classList.add('hidden');
-                return; 
+                if (this.state.currentUser !== 'vegendigital@gmail.com') {
+                    setupModal.classList.remove('hidden');
+                    setupModal.style.display = 'flex';
+                    document.getElementById('close-setup').classList.add('hidden');
+                }
             }
+            return;
         } 
         
         setupModal.classList.add('hidden');
@@ -535,8 +903,9 @@ class UI {
                 <td>${x.checkin}</td><td>${x.platform}</td><td>${x.origin}</td><td>${parseFloat(x.bruto).toFixed(2)}€</td> 
                 <td class="text-success">${parseFloat(x.net).toFixed(2)}€</td> 
                 <td> 
-                    <button class="icon-btn" onclick="window.editB(${x.id})"><i class="fa fa-pencil text-accent"></i></button> 
-                    <button class="icon-btn" onclick="window.delB(${x.id})"><i class="fa fa-trash text-danger"></i></button> 
+                    <button class="icon-btn" onclick="window.editB(${x.id})" title="Editar"><i class="fa fa-pencil text-accent"></i></button>
+                    <button class="icon-btn" onclick="window.dupB(${x.id})" title="Duplicar"><i class="fa fa-copy text-success"></i></button>
+                    <button class="icon-btn" onclick="window.delB(${x.id})" title="Eliminar"><i class="fa fa-trash text-danger"></i></button>
                 </td> 
             </tr> 
         `).join(''); 
@@ -550,8 +919,9 @@ class UI {
             <tr> 
                 <td>${x.date}</td><td>${x.category}</td><td>${parseFloat(x.amount).toFixed(2)}€</td> 
                 <td> 
-                    <button class="icon-btn" onclick="window.editE(${x.id})"><i class="fa fa-pencil text-accent"></i></button> 
-                    <button class="icon-btn" onclick="window.delE(${x.id})"><i class="fa fa-trash text-danger"></i></button> 
+                    <button class="icon-btn" onclick="window.editE(${x.id})" title="Editar"><i class="fa fa-pencil text-accent"></i></button>
+                    <button class="icon-btn" onclick="window.dupE(${x.id})" title="Duplicar"><i class="fa fa-copy text-success"></i></button>
+                    <button class="icon-btn" onclick="window.delE(${x.id})" title="Eliminar"><i class="fa fa-trash text-danger"></i></button>
                 </td> 
             </tr> 
         `).join(''); 
@@ -592,7 +962,33 @@ class UI {
             <tr><td>${x.month}</td><td>${x.nights}</td><td>${x.bruto.toFixed(2)}€</td><td class="text-success">${x.net.toFixed(2)}€</td></tr> 
         `).join(''); 
  
-        // Render Matrix
+        // Render Matrix Setup
+        const yearSelect = document.getElementById('matrix-year-select');
+        const currentYear = new Date().getFullYear();
+        let selectedYear = yearSelect ? yearSelect.value : currentYear.toString();
+
+        // Populate year selector
+        if (yearSelect) {
+            const years = new Set();
+            b.forEach(x => years.add(x.checkin.substring(0, 4)));
+            e.forEach(x => years.add(x.date.substring(0, 4)));
+            if (years.size === 0) years.add(currentYear.toString());
+
+            const sortedYears = Array.from(years).sort().reverse();
+
+            // Check if we need to update options to avoid destroying current selection unless necessary
+            const currentOptions = Array.from(yearSelect.options).map(o => o.value);
+            const needsUpdate = currentOptions.join(',') !== sortedYears.join(',');
+
+            if (needsUpdate || yearSelect.options.length === 0) {
+                yearSelect.innerHTML = sortedYears.map(y => `<option value="${y}" ${y === selectedYear ? 'selected' : ''}>${y}</option>`).join('');
+                if (!sortedYears.includes(selectedYear)) {
+                     selectedYear = sortedYears[0]; // Reset to newest year if previous selection is invalid
+                }
+            }
+            selectedYear = yearSelect.value || currentYear.toString();
+        }
+
         const selObj = document.getElementById('matrix-var-select');
         let selectedVars = [];
         if(selObj && selObj.options) {
@@ -610,14 +1006,25 @@ class UI {
             comisiones: "Comisiones (€)"
         };
 
-        const headHtml = '<tr><th>Variables</th>' + data.map(x => `<th>${x.month}</th>`).join('') + '</tr>';
+        const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+        const matrixData = [];
+        for (let i = 1; i <= 12; i++) {
+            const monthStr = i.toString().padStart(2, '0');
+            const key = `${selectedYear}-${monthStr}`;
+            matrixData.push({
+                label: monthNames[i-1],
+                data: months[key] || { res_count: 0, nights: 0, bruto: 0, net: 0, comisiones: 0, expenses: 0 }
+            });
+        }
+
+        const headHtml = '<tr><th>Variables</th>' + matrixData.map(x => `<th>${x.label}</th>`).join('') + '</tr>';
         document.getElementById('matrix-head').innerHTML = headHtml;
 
         let bodyHtml = '';
         selectedVars.forEach(v => {
             bodyHtml += `<tr><td><b>${varLabels[v]}</b></td>`;
-            data.forEach(x => {
-                let val = x[v];
+            matrixData.forEach(x => {
+                let val = x.data[v];
                 let displayVal = (v === 'res_count' || v === 'nights') ? val : val.toFixed(2);
                 bodyHtml += `<td>${displayVal}</td>`;
             });
@@ -650,7 +1057,7 @@ class UI {
         if(fPlatform) b = b.filter(x => x.platform === fPlatform);
 
         document.getElementById('bank-list-body').innerHTML = b.map(x => { 
-            const rec = this.state.bankRecords.find(r => r.id === x.id) || { val: 0, obs: '' }; 
+            const rec = this.state.bankRecords.find(r => r.booking_id == x.id) || { val: 0, obs: '' };
             const diff = rec.val - x.net; 
             
             let colorClass = 'text-warning'; // Default or something else if needed
@@ -678,20 +1085,20 @@ class UI {
             {t:"Rendimiento Anual", v:"6.5%", icon:"percent"}
         ]; 
         c.innerHTML = m.map(x => `<div class="card"><h3><i class="fa fa-${x.icon}"></i> ${x.t}</h3><p>${x.v}</p></div>`).join(''); 
-        document.getElementById('market-status-box').innerText = "Datos simulados basados en Código Postal " + (this.state.config ? this.state.config.cp : ''); 
+        document.getElementById('market-status-box').innerHTML = `
+            <strong>Datos Simulados (Modo Desarrollo)</strong><br>
+            <small>Basados en Código Postal ${this.state.config ? this.state.config.cp : ''}. Esta sección está preparada para integrar una API externa de mercado o Inteligencia Artificial (ej. Google Gemini) que reemplace estos valores mock con análisis real y web scraping de la zona.</small>
+        `;
 
-        // Leaflet Map Logic
+        // Leaflet Map Logic (Mocked Data)
         if (!this.mapInitialized) {
-            // Wait for DOM to be ready before initializing
             setTimeout(() => {
-                // Initialize map (simulated center in Madrid)
                 const map = L.map('map').setView([40.4168, -3.7038], 14);
                 
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '© OpenStreetMap contributors'
                 }).addTo(map);
 
-                // Add Property Marker (Blue)
                 const blueIcon = new L.Icon({
                     iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
                     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
@@ -699,12 +1106,7 @@ class UI {
                 });
                 L.marker([40.4168, -3.7038], {icon: blueIcon}).addTo(map).bindPopup("<b>Tu Propiedad</b><br>"+(this.state.config?this.state.config.calle:'')).openPopup();
 
-                // Generate simulated competitors
-                const colors = {
-                    'Turístico': 'red',
-                    'Temporal': 'orange',
-                    'Permanente': 'green'
-                };
+                const colors = { 'Turístico': 'red', 'Temporal': 'orange', 'Permanente': 'green' };
                 
                 for(let i=0; i<15; i++) {
                     const lat = 40.4168 + (Math.random() - 0.5) * 0.02;
@@ -737,16 +1139,50 @@ class UI {
 } 
  
 const app = new UI(new AppState()); 
+window.app = app; // Exponer al window para que los eventos onclick del HTML puedan llamarlo
  
-// Globales para botones 
+// Globales para botones - Modificados para trabajar como modulo
 window.setSort = (t, k) => { app.sorts[t].d *= -1; app.sorts[t].k = k; app.renderAll(); }; 
-window.delB = (id) => { app.state.bookings = app.state.bookings.filter(x => x.id !== id); app.state.save(); app.renderAll(); }; 
-window.editB = (id) => { const x = app.state.bookings.find(b => b.id === id); const f = document.getElementById('form-booking'); Object.keys(x).forEach(k => { if(f[k]) f[k].value = x[k]; }); window.scrollTo(0,0); }; 
-window.delE = (id) => { app.state.expenses = app.state.expenses.filter(x => x.id !== id); app.state.save(); app.renderAll(); }; 
-window.editE = (id) => { const x = app.state.expenses.find(e => e.id === id); const f = document.getElementById('form-expense'); Object.keys(x).forEach(k => { if(f[k]) f[k].value = x[k]; }); window.scrollTo(0,0); }; 
-window.upBank = (id, k, v) => {  
-    let r = app.state.bankRecords.find(x => x.id === id); 
-    if(!r) { r = {id, val:0, obs:''}; app.state.bankRecords.push(r); } 
-    r[k] = k === 'val' ? parseFloat(v) : v; 
-    app.state.save(); app.renderAll(); 
+window.delB = async (id) => { if(confirm("¿Eliminar reserva?")) { await app.state.deleteRecord('booking', id); app.renderAll(); } };
+window.editB = (id) => {
+    const x = app.state.bookings.find(b => b.id == id);
+    const f = document.getElementById('form-booking');
+    Object.keys(x).forEach(k => { if(f.elements[k]) f.elements[k].value = x[k]; });
+    f.elements['booking_id'].value = id; // Asegurar que el ID se pasa al hidden input
+    document.querySelector('button[data-target="view-bookings"]').click();
+    window.scrollTo(0,0);
+};
+window.dupB = (id) => {
+    window.editB(id);
+    document.getElementById('edit-booking-id').value = ''; // Vaciar ID para que se guarde como nuevo
+    alert("Reserva duplicada en el formulario. Edita los campos necesarios y presiona Guardar.");
+};
+window.delE = async (id) => { if(confirm("¿Eliminar gasto?")) { await app.state.deleteRecord('expense', id); app.renderAll(); } };
+window.editE = (id) => {
+    const x = app.state.expenses.find(e => e.id == id);
+    const f = document.getElementById('form-expense');
+    Object.keys(x).forEach(k => { if(f.elements[k]) f.elements[k].value = x[k]; });
+    f.elements['expense_id'].value = id; // Asegurar que el ID se pasa al hidden input
+    document.querySelector('button[data-target="view-expenses"]').click();
+    window.scrollTo(0,0);
+};
+window.dupE = (id) => {
+    window.editE(id);
+    document.querySelector('#form-expense [name="expense_id"]').value = ''; // Vaciar ID para nuevo
+    alert("Gasto duplicado en el formulario. Edita los campos necesarios y presiona Guardar.");
+};
+window.upBank = async (id, k, v) => {
+    let r = app.state.bankRecords.find(x => x.booking_id === id);
+    let val = r ? r.val : 0;
+    let obs = r ? r.obs : '';
+    if(k === 'val') val = parseFloat(v);
+    if(k === 'obs') obs = v;
+    await app.state.updateBank(id, val, obs);
+    app.renderAll();
+};
+window.delUser = async (id) => {
+    if(confirm("¿Eliminar usuario y todas sus propiedades asociadas permanentemente?")) {
+        await app.state.adminDeleteUser(id);
+        app.renderAll();
+    }
 };

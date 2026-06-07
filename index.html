@@ -3,35 +3,77 @@
 <head> 
     <meta charset="UTF-8"> 
     <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
-    <title>Madrid Rental - Dashboard BI Profesional</title> 
+    <title>Keep in Rent - Dashboard BI Profesional</title>
     <link rel="stylesheet" href="style.css"> 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"> 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Load Firebase Config asynchronously
+        window.FIREBASE_CONFIG_PROMISE = fetch('env.php')
+            .then(response => {
+                if (!response.ok) throw new Error("Failed to load Firebase configuration.");
+                return response.json();
+            })
+            .then(data => {
+                window.FIREBASE_CONFIG = data;
+                return data;
+            })
+            .catch(error => {
+                console.error(error);
+            });
+    </script>
 </head> 
 <body> 
  
     <!-- Login Modal -->
     <div id="login-modal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content" style="text-align: center;">
             <h3>🔐 Acceso a Keep in Rent</h3>
-            <form id="login-form">
-                <input type="email" name="email" id="login-email" placeholder="Email" required>
-                <input type="password" name="password" id="login-password" placeholder="Contraseña" required>
-                <button type="submit" class="btn-primary" style="width:100%">Iniciar Sesión</button>
-            </form>
+            <p style="margin-bottom: 20px; font-size: 0.9rem; color: #64748b;">Inicia sesión para gestionar tus propiedades</p>
+            <button id="btn-google-login" class="btn-primary" style="width:100%; display: flex; align-items: center; justify-content: center; gap: 10px; background-color: #ffffff; color: #475569; border: 1px solid #cbd5e1;">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" style="width: 20px;">
+                Continuar con Google
+            </button>
         </div>
     </div>
 
     <div id="setup-modal" class="modal hidden" style="display: none;"> 
-        <div class="modal-content"> 
+        <div class="modal-content" style="max-height: 90vh; overflow-y: auto; max-width: 600px;">
             <h3>📍 Registrar Nueva Propiedad</h3> 
             <form id="setup-form"> 
-                <input type="text" name="calle" id="input-calle" placeholder="Calle" required> 
-                <input type="text" name="cp" id="input-cp" placeholder="Código Postal" required> 
-                <input type="text" name="ciudad" id="input-ciudad" placeholder="Ciudad" required> 
-                <input type="text" name="pais" id="input-pais" placeholder="País" required> 
+                <h4 style="margin: 10px 0 5px 0; color: #64748b; font-size: 0.85rem;">Ubicación</h4>
+                <div class="form-row-3" style="margin-bottom: 10px;">
+                    <div class="field"><input type="text" name="calle" id="input-calle" placeholder="Calle" required></div>
+                    <div class="field"><input type="text" name="cp" id="input-cp" placeholder="Código Postal" required></div>
+                    <div class="field"><input type="text" name="ciudad" id="input-ciudad" placeholder="Ciudad" required></div>
+                    <div class="field"><input type="text" name="pais" id="input-pais" placeholder="País" required></div>
+                </div>
+
+                <h4 style="margin: 10px 0 5px 0; color: #64748b; font-size: 0.85rem;">Características Principales</h4>
+                <div class="form-row-3" style="margin-bottom: 10px;">
+                    <div class="field"><label>Superficie (m²)</label><input type="number" name="m2" placeholder="m²"></div>
+                    <div class="field"><label>Habitaciones</label><input type="number" name="habitaciones" placeholder="Ej: 2"></div>
+                    <div class="field"><label>Baños</label><input type="number" name="banos" placeholder="Ej: 1"></div>
+                    <div class="field"><label>Capacidad (Pers.)</label><input type="number" name="capacidad" placeholder="Ej: 4"></div>
+                </div>
+
+                <h4 style="margin: 10px 0 5px 0; color: #64748b; font-size: 0.85rem;">Amenidades</h4>
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px;">
+                    <label style="display: flex; align-items: center; gap: 5px; font-size: 0.85rem;"><input type="checkbox" name="piscina" value="1"> Piscina</label>
+                    <label style="display: flex; align-items: center; gap: 5px; font-size: 0.85rem;"><input type="checkbox" name="cochera" value="1"> Cochera</label>
+                    <label style="display: flex; align-items: center; gap: 5px; font-size: 0.85rem;"><input type="checkbox" name="balcon" value="1"> Balcón / Terraza</label>
+                    <label style="display: flex; align-items: center; gap: 5px; font-size: 0.85rem;"><input type="checkbox" name="ascensor" value="1"> Ascensor</label>
+                </div>
+
+                <h4 style="margin: 10px 0 5px 0; color: #64748b; font-size: 0.85rem;">Atributos Personalizados</h4>
+                <div id="custom-features-container" style="margin-bottom: 15px;"></div>
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <input type="text" id="custom-feature-name" placeholder="Ej: Jacuzzi, Parrilla..." style="flex: 1;">
+                    <button type="button" id="btn-add-feature" class="btn-secondary" style="padding: 10px;">Añadir</button>
+                </div>
+
                 <button type="submit" class="btn-primary" style="width:100%">Guardar Activo</button> 
                 <button type="button" id="close-setup" class="btn-secondary hidden" style="width:100%; margin-top:5px;">Cancelar</button> 
             </form> 
@@ -66,10 +108,17 @@
  
     <header class="main-header"> 
         <div class="header-info"> 
-            <h1>Madrid <span class="text-light">Rental</span></h1> 
-            <div class="address-box" id="edit-address-trigger" style="cursor: pointer;"> 
-                <small><i class="fa fa-map-marker-alt text-accent"></i> <span id="display-address">Piso...</span></small> 
-            </div> 
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <h1>Keep in <span class="text-light">Rent</span></h1>
+                <select id="property-selector" class="header-select"></select>
+                <button id="btn-add-property" class="btn-secondary" style="padding: 5px 10px; font-size: 0.8rem;"><i class="fa fa-plus"></i></button>
+            </div>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div class="address-box" id="edit-address-trigger">
+                    <small><i class="fa fa-map-marker-alt text-accent"></i> <span id="display-address">Cargando...</span></small>
+                </div>
+                <button id="btn-logout" class="btn-secondary" style="padding: 5px 10px; font-size: 0.8rem;"><i class="fa fa-sign-out-alt"></i> Salir</button>
+            </div>
         </div> 
         <nav id="main-nav"> 
             <button class="nav-btn active" data-target="view-dashboard">Resumen</button> 
@@ -78,6 +127,7 @@
             <button class="nav-btn" data-target="view-analysis">Análisis</button> 
             <button class="nav-btn" data-target="view-bank">Bancos</button> 
             <button class="nav-btn" data-target="view-market">Comparativa</button> 
+            <button class="nav-btn hidden" id="nav-btn-admin" data-target="view-admin" style="background: #f43f5e; color: white;">Super Admin</button>
         </nav> 
     </header> 
  
@@ -117,7 +167,7 @@
             <form id="form-booking" class="data-form"> 
                 <input type="hidden" name="booking_id" id="edit-booking-id"> 
                 <div class="form-row-3"> 
-                    <div class="field"><label>Canal</label><select name="platform"><option value="Booking">Booking</option><option value="Airbnb">Airbnb</option><option value="Directo">Directo</option></select></div> 
+                    <div class="field"><label>Canal</label><select name="platform" id="form-platform-select"></select></div>
                     <div class="field"><label>Reserva #</label><input type="text" name="booking_ref" required></div> 
                     <div class="field"><label>Origen</label><select name="origin" id="origin-select"></select></div> 
                 </div> 
@@ -136,7 +186,7 @@
  
             <div class="tab-filter-row"> 
                 <input type="date" id="f-bookings-start"> a <input type="date" id="f-bookings-end"> 
-                <select id="f-bookings-platform"><option value="">Todos los Canales</option><option value="Booking">Booking</option><option value="Airbnb">Airbnb</option><option value="Directo">Directo</option></select> 
+                <select id="f-bookings-platform"><option value="">Todos los Canales</option></select>
                 <select id="f-bookings-origin"><option value="">Todos los Orígenes</option></select> 
             </div> 
  
@@ -149,7 +199,7 @@
                             <th class="sortable" onclick="setSort('bookings', 'origin')">País ↕</th> 
                             <th class="sortable" onclick="setSort('bookings', 'bruto')">Bruto ↕</th> 
                             <th class="sortable" onclick="setSort('bookings', 'net')">Neto ↕</th> 
-                            <th>Acciones</th> 
+                            <th style="min-width: 100px;">Acciones</th>
                         </tr> 
                     </thead> 
                     <tbody id="list-bookings-body"></tbody> 
@@ -163,7 +213,7 @@
                 <input type="hidden" name="expense_id"> 
                 <div class="form-row-3"> 
                     <div class="field"><label>Fecha</label><input type="date" name="date" class="set-today" required></div> 
-                    <div class="field"><label>Tipo</label><select name="category" required><option value="Luz">Luz</option><option value="Gas">Gas</option><option value="Internet">Internet</option><option value="Comunidad">Comunidad</option><option value="IBI">IBI</option><option value="Mantenimiento">Mantenimiento</option></select></div> 
+                    <div class="field"><label>Tipo</label><select name="category" id="form-category-select" required></select></div>
                     <div class="field"><label>Monto €</label><input type="number" name="amount" step="0.01" required></div> 
                 </div> 
                 <div class="field"><label>Observaciones</label><input type="text" name="observations"></div> 
@@ -172,7 +222,7 @@
  
             <div class="tab-filter-row"> 
                 <input type="date" id="f-expenses-start"> a <input type="date" id="f-expenses-end"> 
-                <select id="f-expenses-type"><option value="">Todos los Tipos</option><option value="Luz">Luz</option><option value="Gas">Gas</option><option value="Internet">Internet</option><option value="Comunidad">Comunidad</option><option value="IBI">IBI</option><option value="Mantenimiento">Mantenimiento</option></select> 
+                <select id="f-expenses-type"><option value="">Todos los Tipos</option></select>
             </div> 
  
             <div class="table-responsive"> 
@@ -182,7 +232,7 @@
                             <th class="sortable" onclick="setSort('expenses', 'date')">Fecha ↕</th> 
                             <th class="sortable" onclick="setSort('expenses', 'category')">Categoría ↕</th> 
                             <th class="sortable" onclick="setSort('expenses', 'amount')">Monto ↕</th> 
-                            <th>Acciones</th> 
+                            <th style="min-width: 100px;">Acciones</th>
                         </tr> 
                     </thead> 
                     <tbody id="list-expenses-body"></tbody> 
@@ -190,26 +240,30 @@
             </div> 
         </section> 
  
-        <section id="view-analysis" class="app-view analysis-container"> 
-            <!-- Sidebar for Analysis Type -->
-            <div style="width: 200px; background: white; border-right: 1px solid #e2e8f0; padding: 15px; display: flex; flex-direction: column; gap: 10px;">
-                <button class="btn-primary" id="btn-show-matrix" style="text-align:left; background: var(--accent);">Matriz de Resultados</button>
-                <button class="btn-secondary" id="btn-show-period" style="text-align:left; border: none;">Análisis por Período</button>
-                <button class="btn-secondary" id="btn-show-cross" style="text-align:left; border: none;">Explorador Cruzado</button>
+        <section id="view-analysis" class="app-view">
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <button class="btn-primary" id="btn-show-matrix" style="width: auto;">Matriz de Resultados</button>
+                <button class="btn-secondary" id="btn-show-period" style="width: auto;">Análisis por Período</button>
+                <button class="btn-secondary" id="btn-show-cross" style="width: auto;">Explorador Cruzado</button>
             </div>
 
-            <!-- Main Content Area -->
-            <div style="flex: 1; padding: 15px; overflow-x: auto;">
+            <div style="overflow-x: auto;">
                 
                 <div class="tab-filter-row" style="margin-bottom:20px;"> 
                     <input type="date" id="f-analysis-start"> a <input type="date" id="f-analysis-end"> 
-                    <select id="f-analysis-platform"><option value="">Canal...</option><option value="Booking">Booking</option><option value="Airbnb">Airbnb</option><option value="Directo">Directo</option></select> 
+                    <select id="f-analysis-platform"><option value="">Canal...</option></select>
                     <select id="f-analysis-origin"><option value="">Origen...</option></select> 
                 </div> 
 
                 <!-- View: Matriz -->
                 <div id="analysis-v-matrix">
                     <h2>Matriz de Resultados</h2>
+                    <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+                        <label>Año:</label>
+                        <select id="matrix-year-select" style="width: auto;">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
                     <div style="margin-bottom: 10px;">
                         <label>Seleccionar Variables (Y): </label>
                         <select id="matrix-var-select" multiple style="height: 100px; width: 250px;">
@@ -278,9 +332,6 @@
                     </select>
                     <select id="f-bank-platform" style="margin-left:10px;">
                         <option value="">Cualquier Canal</option>
-                        <option value="Booking">Booking</option>
-                        <option value="Airbnb">Airbnb</option>
-                        <option value="Directo">Directo</option>
                     </select>
                 </div> 
             </div> 
@@ -292,6 +343,64 @@
             </div> 
         </section> 
  
+        <section id="view-admin" class="app-view">
+            <h2>Panel Super Admin</h2>
+            <div class="card-grid-admin">
+
+                <!-- Vincular Propiedad a Usuario -->
+                <div class="card">
+                    <h3 style="margin-bottom: 10px;">🔗 Vincular Propiedad a Usuario</h3>
+                    <form id="form-admin-link" style="display: flex; gap: 10px; align-items: flex-end;">
+                        <div class="field" style="flex: 1;">
+                            <label>Propiedad</label>
+                            <select id="admin-prop-select" required></select>
+                        </div>
+                        <div class="field" style="flex: 1;">
+                            <label>Email del Usuario</label>
+                            <input type="email" id="admin-user-email" placeholder="usuario@email.com" required>
+                        </div>
+                        <button type="submit" class="btn-primary" style="width: auto;">Vincular</button>
+                    </form>
+                </div>
+
+                <!-- Modificar Gastos / Canales -->
+                <div class="card">
+                    <h3 style="margin-bottom: 10px;">⚙️ Variables Globales</h3>
+                    <div style="display: flex; gap: 20px;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.8rem; font-weight: bold; display: block; margin-bottom: 5px;">Categorías de Gasto (separadas por coma)</label>
+                            <input type="text" id="admin-cat-input" style="width: 100%; margin-bottom: 5px;">
+                            <button id="btn-admin-save-cat" class="btn-secondary" style="width: 100%;">Guardar Categorías</button>
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.8rem; font-weight: bold; display: block; margin-bottom: 5px;">Canales de Reserva (separadas por coma)</label>
+                            <input type="text" id="admin-chan-input" style="width: 100%; margin-bottom: 5px;">
+                            <button id="btn-admin-save-chan" class="btn-secondary" style="width: 100%;">Guardar Canales</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Eliminar Propiedad -->
+                <div class="card" style="border-left-color: var(--danger);">
+                    <h3 style="margin-bottom: 10px; color: var(--danger);">⚠️ Eliminar Propiedad</h3>
+                    <p style="font-size: 0.8rem; margin-bottom: 10px;">Elimina permanentemente la propiedad seleccionada arriba y todos sus datos.</p>
+                    <button id="btn-admin-delete-prop" class="btn-primary" style="background: var(--danger);">Eliminar Propiedad Activa</button>
+                </div>
+
+                <!-- Gestionar Usuarios -->
+                <div class="card" style="border-left-color: var(--warning);">
+                    <h3 style="margin-bottom: 10px; color: var(--warning);">👥 Gestión de Usuarios</h3>
+                    <div class="table-responsive">
+                        <table class="data-table small">
+                            <thead><tr><th>ID</th><th>Email</th><th>Acciones</th></tr></thead>
+                            <tbody id="admin-users-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
         <section id="view-market" class="app-view"> 
             <h2>Comparativa de Mercado</h2> 
             <div class="card-grid" id="market-cards-container" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 20px;"></div> 
@@ -317,6 +426,6 @@
  
     <button id="btn-open-import" class="btn-secondary" style="position:fixed; bottom:20px; right:20px; border-radius:50px;"><i class="fa fa-upload"></i> Importar CSV</button> 
  
-    <script src="app.js"></script> 
+    <script type="module" src="js/app.js"></script>
 </body> 
 </html>
