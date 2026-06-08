@@ -44,6 +44,7 @@ class AppState {
 
     async loadUserProperties() {
         if (!this.currentUser) return;
+        const API_URL = 'api.php';
         try {
             const token = await auth.currentUser.getIdToken();
 
@@ -67,8 +68,8 @@ class AppState {
 
             if (propsData.error) {
                 console.error("API Error (Properties):", propsData.error);
-                alert("Error cargando propiedades desde la Base de Datos:\n" + propsData.error + "\n\nPor favor, actualiza tus credenciales de MySQL en api.php.");
-                this.properties = []; // Evitar el fallo de .length
+                alert("Error cargando propiedades desde la Base de Datos:\n" + propsData.error + "\n\nPor favor, verifica la conexión.");
+                this.properties = [];
             } else {
                 this.properties = Array.isArray(propsData) ? propsData : [];
             }
@@ -79,6 +80,8 @@ class AppState {
                 await this.loadActiveData(this.properties[0].id);
             } else {
                 this.config = null;
+                // Si no hay propiedades, cerrar modal y refrescar la UI globalmente en lugar de fallar
+                if (window.appUI) window.appUI.renderAll();
             }
         } catch (e) { console.error("Error loading properties:", e); }
     }
