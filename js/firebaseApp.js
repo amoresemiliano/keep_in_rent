@@ -21,17 +21,11 @@ let config = fallbackConfig;
 
 if (window.FIREBASE_CONFIG_PROMISE) {
     try {
-        const loadedConfig = await window.FIREBASE_CONFIG_PROMISE;
-        // Solo usar la configuración si apiKey existe y no está vacía
-        if (loadedConfig && loadedConfig.apiKey && loadedConfig.apiKey !== "") {
-            config = loadedConfig;
-        } else {
-            console.warn("Configuración de Firebase cargada pero vacía, usando fallback");
-        }
+        config = await window.FIREBASE_CONFIG_PROMISE || fallbackConfig;
     } catch (e) {
         console.error("Failed to load Firebase config from API, using fallback", e);
     }
-} else if (window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.apiKey && window.FIREBASE_CONFIG.apiKey !== "") {
+} else if (window.FIREBASE_CONFIG) {
     config = window.FIREBASE_CONFIG;
 }
 

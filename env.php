@@ -18,11 +18,9 @@ if (file_exists($envPath)) {
     foreach ($lines as $line) {
         if (strpos(trim($line), '#') === 0) continue;
 
-        $parts = explode('=', $line, 2);
-        if (count($parts) !== 2) continue; // Skip malformed lines
-
-        $name = trim($parts[0]);
-        $value = trim($parts[1]);
+        list($name, $value) = explode('=', $line, 2);
+        $name = trim($name);
+        $value = trim($value);
 
         // Remove surrounding quotes if present
         $value = trim($value, '"\'');
@@ -36,9 +34,7 @@ if (file_exists($envPath)) {
         if ($name === 'FIREBASE_MEASUREMENT_ID' || $name === 'VITE_FIREBASE_MEASUREMENT_ID') $config['measurementId'] = $value;
     }
 } else {
-    http_response_code(404);
-    echo json_encode(["error" => "No .env file found"]);
-    exit;
+    // Fallback logic could go here or return error
 }
 
 echo json_encode($config);

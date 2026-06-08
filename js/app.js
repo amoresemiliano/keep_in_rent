@@ -51,13 +51,27 @@ class AppState {
             const settingsRes = await fetch(`${API_URL}?action=get_settings`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            this.globalSettings = await settingsRes.json();
+            const settingsData = await settingsRes.json();
+            if (settingsData.error) {
+                console.error("API Error (Settings):", settingsData.error);
+                this.globalSettings = {};
+            } else {
+                this.globalSettings = settingsData;
+            }
 
             // Load properties
             const res = await fetch(`${API_URL}?action=get_properties`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            this.properties = await res.json();
+            const propsData = await res.json();
+
+            if (propsData.error) {
+                console.error("API Error (Properties):", propsData.error);
+                alert("Error cargando propiedades desde la Base de Datos:\n" + propsData.error + "\n\nPor favor, actualiza tus credenciales de MySQL en api.php.");
+                this.properties = []; // Evitar el fallo de .length
+            } else {
+                this.properties = Array.isArray(propsData) ? propsData : [];
+            }
 
             if (this.currentActiveId && this.properties.find(p => p.id == this.currentActiveId)) {
                 await this.loadActiveData(this.currentActiveId);
