@@ -6,9 +6,9 @@ header("Content-Type: application/json");
 
 // TO DO: Replace with BlueHost DB credentials
 $host = "localhost";
-$db_name = "madrid_rental_db";
-$username = "root";
-$password = "";
+$db_name = "athcomar_keep_in_rent";
+$username = "athcomar_keep_in_rent_user";
+$password = "}yTLhuX[PiM$";
 
 try {
     $conn = new PDO("mysql:host=$host;dbname=$db_name;charset=utf8", $username, $password);
@@ -43,19 +43,11 @@ function verifyFirebaseToken($token) {
 
     if (!$header || !$payload) return null;
 
-    // 1. Check expiration, audience, and issuer to prevent cross-project spoofing
-    if (isset($payload['exp']) && $payload['exp'] < time()) {
-        return null; // Token expired
-    }
+    if (isset($payload['exp']) && $payload['exp'] < time()) return null;
     $projectId = "keep-in-rent";
-    if (!isset($payload['aud']) || $payload['aud'] !== $projectId) {
-        return null;
-    }
-    if (!isset($payload['iss']) || $payload['iss'] !== 'https://securetoken.google.com/' . $projectId) {
-        return null;
-    }
+    if (!isset($payload['aud']) || $payload['aud'] !== $projectId) return null;
+    if (!isset($payload['iss']) || $payload['iss'] !== 'https://securetoken.google.com/' . $projectId) return null;
 
-    // 2. Fetch Google's public keys using a local file cache to prevent rate-limiting and latency
     $cacheFile = sys_get_temp_dir() . '/firebase_keys.json';
     $keysJson = '';
 
@@ -71,20 +63,14 @@ function verifyFirebaseToken($token) {
     if (!$keysJson) return null;
     $keys = json_decode($keysJson, true);
 
-    // 3. Verify signature using the key that matches the 'kid' in the header
     $kid = $header['kid'] ?? null;
     if (!$kid || !isset($keys[$kid])) return null;
 
     $publicKey = $keys[$kid];
-
     $dataToVerify = $parts[0] . '.' . $parts[1];
 
-    // openssl_verify returns 1 on success, 0 on failure, -1 on error
     $valid = openssl_verify($dataToVerify, $signature, $publicKey, OPENSSL_ALGO_SHA256);
-
-    if ($valid !== 1) {
-        return null; // Signature is invalid
-    }
+    if ($valid !== 1) return null;
 
     return $payload['email'] ?? null;
 }
@@ -108,7 +94,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'OPTIONS') {
 
 $action = isset($_GET['action']) ? $_GET['action'] : '';
 
-// Helper function to get user_id from email
 function getUserId($conn, $email) {
     $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
     $stmt->execute([$email]);
@@ -122,13 +107,10 @@ function getUserId($conn, $email) {
     return $user['id'];
 }
 
-// Ensure the user actually owns the property they are trying to access
 function verifyPropertyOwnership($conn, $property_id, $user_id) {
-    // Permite al super admin acceder a cualquier propiedad
     global $userEmail;
     if ($userEmail === 'vegendigital@gmail.com') return;
 
-    // Check direct ownership or shared access
     $stmt = $conn->prepare("
         SELECT id FROM properties WHERE id = ? AND user_id = ?
         UNION
@@ -142,7 +124,6 @@ function verifyPropertyOwnership($conn, $property_id, $user_id) {
     }
 }
 
-// Function to enforce super admin
 function enforceSuperAdmin($email) {
     if ($email !== 'vegendigital@gmail.com') {
         http_response_code(403);
@@ -190,9 +171,25 @@ switch($action) {
         $stmt->execute([
             $user_id, $data['calle'], $data['cp'], $data['ciudad'], $data['pais'],
             $data['m2'] ?: null, $data['habitaciones'] ?: null, $data['banos'] ?: null, $data['capacidad'] ?: null,
-            $data['piscina'], $data['cochera'], $data['balcon'], $data['ascensor'], $data['custom_features']
+            $data['piscina'], $data['cochera'], $data['balcon'], $data['ascensor'], json_encode($data['custom_features'])
         ]);
-        echo json_encode(["id" => $conn->lastInsertId()]);
+        echo json_encode(["property_id" => $conn->lastInsertId()]);
+        break;
+
+    case 'updateConfig':
+        $property_id = $_GET['property_id'];
+        verifyPropertyOwnership($conn, $property_id, $user_id);
+        $data = json_decode(file_get_contents("php://input"), true);
+
+        $sql = "UPDATE properties SET calle=?, cp=?, ciudad=?, pais=?, m2=?, habitaciones=?, banos=?, capacidad=?, piscina=?, cochera=?, balcon=?, ascensor=?, custom_features=? WHERE id=?";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([
+            $data['calle'], $data['cp'], $data['ciudad'], $data['pais'],
+            $data['m2'] ?: null, $data['habitaciones'] ?: null, $data['banos'] ?: null, $data['capacidad'] ?: null,
+            $data['piscina'], $data['cochera'], $data['balcon'], $data['ascensor'], json_encode($data['custom_features']),
+            $property_id
+        ]);
+        echo json_encode(["status" => "success"]);
         break;
 
     case 'get_data':
@@ -208,10 +205,31 @@ switch($action) {
         $stmtBank = $conn->prepare("SELECT * FROM bank_records WHERE property_id = ?");
         $stmtBank->execute([$property_id]);
 
+        $stmtP = $conn->prepare("SELECT * FROM properties WHERE id = ?");
+        $stmtP->execute([$property_id]);
+        $prop = $stmtP->fetch(PDO::FETCH_ASSOC);
+
+        // Map DB columns back to config object expected by frontend
+        $config = [];
+        if ($prop) {
+            $config['calle'] = $prop['calle'];
+            $config['ciudad'] = $prop['ciudad'];
+            $config['cp'] = $prop['cp'];
+            $config['pais'] = $prop['pais'];
+            $config['m2'] = $prop['m2'];
+            $config['rooms'] = $prop['habitaciones'];
+            $config['baths'] = $prop['banos'];
+            $config['pax'] = $prop['capacidad'];
+            $config['floor'] = $prop['piscina']; // using piscina as floor mapping in front
+            $config['elevator'] = $prop['ascensor'];
+            $config['customFeatures'] = json_decode($prop['custom_features'], true);
+        }
+
         echo json_encode([
             "bookings" => $stmtB->fetchAll(PDO::FETCH_ASSOC),
             "expenses" => $stmtE->fetchAll(PDO::FETCH_ASSOC),
-            "bank_records" => $stmtBank->fetchAll(PDO::FETCH_ASSOC)
+            "bank_records" => $stmtBank->fetchAll(PDO::FETCH_ASSOC),
+            "config" => $config
         ]);
         break;
 
@@ -223,12 +241,12 @@ switch($action) {
             $sql = "UPDATE bookings SET booking_ref=?, platform=?, origin=?, checkin=?, checkout=?, bruto=?, fee_banco=?, fee_thl=?, limpieza=?, net=?, nights=? WHERE id=? AND property_id=?";
             $stmt = $conn->prepare($sql);
             $stmt->execute([$data['booking_ref'], $data['platform'], $data['origin'], $data['checkin'], $data['checkout'], $data['bruto'], $data['fee_banco'], $data['fee_thl'], $data['limpieza'], $data['net'], $data['nights'], $data['id'], $data['property_id']]);
-            echo json_encode(["id" => $data['id']]);
+            echo json_encode(["data" => array_merge($data, ["id" => $data['id']])]);
         } else {
             $sql = "INSERT INTO bookings (property_id, booking_ref, platform, origin, checkin, checkout, bruto, fee_banco, fee_thl, limpieza, net, nights) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             $stmt = $conn->prepare($sql);
             $stmt->execute([$data['property_id'], $data['booking_ref'], $data['platform'], $data['origin'], $data['checkin'], $data['checkout'], $data['bruto'], $data['fee_banco'], $data['fee_thl'], $data['limpieza'], $data['net'], $data['nights']]);
-            echo json_encode(["id" => $conn->lastInsertId()]);
+            echo json_encode(["data" => array_merge($data, ["id" => $conn->lastInsertId()])]);
         }
         break;
 
@@ -245,13 +263,13 @@ switch($action) {
     case 'admin_get_users':
         enforceSuperAdmin($userEmail);
         $stmt = $conn->query("SELECT id, email FROM users");
-        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+        echo json_encode(["users" => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
         break;
 
     case 'admin_link_property':
         enforceSuperAdmin($userEmail);
         $data = json_decode(file_get_contents("php://input"), true);
-        $target_user_id = getUserId($conn, $data['target_email']);
+        $target_user_id = getUserId($conn, $data['user_email']);
         $prop_id = $data['property_id'];
 
         $stmt = $conn->prepare("INSERT IGNORE INTO property_users (property_id, user_id, role) VALUES (?, ?, 'editor')");
@@ -263,7 +281,9 @@ switch($action) {
         enforceSuperAdmin($userEmail);
         $data = json_decode(file_get_contents("php://input"), true);
         $key = $data['key'];
-        $val = json_encode($data['value']);
+        // The front sends an array for categories and platforms, we encode it
+        $valArray = array_map('trim', explode(',', $data['val']));
+        $val = json_encode($valArray);
 
         $stmt = $conn->prepare("INSERT INTO global_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?");
         $stmt->execute([$key, $val, $val]);
@@ -283,7 +303,6 @@ switch($action) {
         $data = json_decode(file_get_contents("php://input"), true);
         $target_user_id = $data['user_id'];
 
-        // Prevent deleting self
         $adminId = getUserId($conn, $userEmail);
         if ($target_user_id == $adminId) {
              http_response_code(400);
@@ -304,12 +323,12 @@ switch($action) {
             $sql = "UPDATE expenses SET date=?, category=?, amount=?, observations=? WHERE id=? AND property_id=?";
             $stmt = $conn->prepare($sql);
             $stmt->execute([$data['date'], $data['category'], $data['amount'], $data['observations'], $data['id'], $data['property_id']]);
-            echo json_encode(["id" => $data['id']]);
+            echo json_encode(["data" => array_merge($data, ["id" => $data['id']])]);
         } else {
             $sql = "INSERT INTO expenses (property_id, date, category, amount, observations) VALUES (?, ?, ?, ?, ?)";
             $stmt = $conn->prepare($sql);
             $stmt->execute([$data['property_id'], $data['date'], $data['category'], $data['amount'], $data['observations']]);
-            echo json_encode(["id" => $conn->lastInsertId()]);
+            echo json_encode(["data" => array_merge($data, ["id" => $conn->lastInsertId()])]);
         }
         break;
 
@@ -322,7 +341,7 @@ switch($action) {
         echo json_encode(["status" => "success"]);
         break;
 
-    case 'save_bank':
+    case 'updateBank':
         $data = json_decode(file_get_contents("php://input"), true);
         verifyPropertyOwnership($conn, $data['property_id'], $user_id);
 
@@ -340,7 +359,7 @@ switch($action) {
         echo json_encode(["status" => "success"]);
         break;
 
-    case 'import_data':
+    case 'importData':
         $data = json_decode(file_get_contents("php://input"), true);
         $property_id = $data['property_id'];
         verifyPropertyOwnership($conn, $property_id, $user_id);

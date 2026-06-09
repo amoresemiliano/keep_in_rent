@@ -30,18 +30,6 @@ body {
     z-index: 100;  
     box-shadow: var(--shadow); 
 } 
-
-.header-select {
-    background: rgba(255,255,255,0.1);
-    color: white;
-    border: 1px solid rgba(255,255,255,0.2);
-    padding: 5px;
-    border-radius: 4px;
-}
-.header-select option {
-    color: black;
-    background: white;
-}
  
 .header-info {  
     display: flex;  
@@ -94,6 +82,7 @@ main {
  
 .app-view { display: none; } 
 .app-view.active { display: block; animation: fadeIn 0.3s ease-out; } 
+.analysis-container.active { display: flex !important; }
  
 @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } } 
  
@@ -103,13 +92,6 @@ main {
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));  
     gap: 1rem;  
     margin-bottom: 1.5rem;  
-}
-
-.card-grid-admin {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
 }
  
 .card {  
@@ -296,9 +278,46 @@ input, select {
     .header-info h1 { font-size: 1.2rem; } 
     .form-row-3 { grid-template-columns: 1fr; } 
     .card-grid { grid-template-columns: 1fr 1fr; } 
-    .card-grid-admin { grid-template-columns: 1fr; }
     .tab-filter-row { flex-direction: column; align-items: stretch; } 
     .tab-filter-row input, .tab-filter-row select { width: 100%; } 
 }
 
+/* --- ANALYSIS VIEW --- */
+.analysis-container {
+    display: none;
+}
+.analysis-container.active {
+    display: flex;
+}
+
 .hidden { display: none !important; }
+/* Analysis modern tabs */
+#view-analysis .btn-primary, #view-analysis .btn-secondary {
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    box-shadow: var(--shadow);
+    transition: all 0.2s;
+    border: 1px solid transparent;
+}
+#view-analysis .btn-secondary {
+    background: white;
+    color: var(--primary);
+    border-color: #cbd5e1;
+}
+#view-analysis .btn-secondary:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+}
+
+@media (max-width: 600px) {
+    /* Better mobile view for the top buttons and selectors */
+    #view-analysis > div:first-child {
+        flex-direction: column;
+        width: 100%;
+    }
+    #view-analysis > div:first-child button {
+        width: 100%;
+    }
+}

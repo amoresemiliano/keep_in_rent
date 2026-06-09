@@ -1,4 +1,0 @@
-[Mon Jun  8 15:12:01 2026] PHP 8.3.6 Development Server (http://localhost:8000) started
-[Mon Jun  8 15:13:19 2026] [::1]:35664 Accepted
-[Mon Jun  8 15:13:19 2026] [::1]:35664 [200]: GET /api.php?action=get_properties
-[Mon Jun  8 15:13:19 2026] [::1]:35664 Closing
