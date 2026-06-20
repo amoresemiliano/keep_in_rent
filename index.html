@@ -116,22 +116,81 @@
             <h2>Nueva Reserva</h2> 
             <form id="form-booking" class="data-form"> 
                 <input type="hidden" name="booking_id" id="edit-booking-id"> 
+                <h3 style="font-size: 0.9rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 10px;">Datos Principales</h3>
                 <div class="form-row-3"> 
-                    <div class="field"><label>Canal</label><select name="platform"><option value="Booking">Booking</option><option value="Airbnb">Airbnb</option><option value="Directo">Directo</option></select></div>
+                    <div class="field"><label>Huésped (Nombre)</label><input type="text" name="guest_name"></div>
+                    <div class="field"><label>Teléfono</label><input type="text" name="guest_phone"></div>
+                    <div class="field"><label>Domicilio</label><input type="text" name="guest_address"></div>
+                </div>
+                <div class="form-row-3">
+                    <div class="field"><label>Canal</label><select name="platform" id="form-platform-select"></select></div>
                     <div class="field"><label>Reserva #</label><input type="text" name="booking_ref" required></div> 
                     <div class="field"><label>Origen</label><select name="origin" id="origin-select"></select></div> 
                 </div> 
                 <div class="form-row-3"> 
                     <div class="field"><label>Check-in</label><input type="date" name="checkin" required></div> 
                     <div class="field"><label>Check-out</label><input type="date" name="checkout" required></div> 
-                    <div class="field"><label>Bruto (€)</label><input type="number" name="bruto" step="0.01" required></div> 
+                    <div class="field" style="flex-direction:row; gap:10px;">
+                        <div style="flex:1;"><label style="font-size:0.75rem;font-weight:700;">Adultos</label><input type="number" name="adults" min="1" value="1" style="width:100%;"></div>
+                        <div style="flex:1;"><label style="font-size:0.75rem;font-weight:700;">Niños</label><input type="number" name="children" min="0" value="0" style="width:100%;"></div>
+                    </div>
                 </div> 
+
+                <h3 style="font-size: 0.9rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; margin: 15px 0 10px;">Económicos</h3>
                 <div class="form-row-3"> 
-                    <div class="field"><label>Fee Canal</label><input type="number" name="fee_banco" step="0.01" value="0"></div> 
-                    <div class="field"><label>Fee THL</label><input type="number" name="fee_thl" step="0.01" value="0"></div> 
-                    <div class="field"><label>Limpieza</label><input type="number" name="limpieza" step="0.01" value="0"></div> 
+                    <div class="field"><label>Bruto Total</label><input type="number" name="bruto" id="bk-bruto" step="0.01" required></div>
+                    <div class="field"><label>Limpieza</label><input type="number" name="limpieza" id="bk-limpieza" step="0.01" value="0"></div>
+                    <div class="field"><label>Neto Propietario</label><input type="number" name="net" id="bk-net" step="0.01" readonly style="background:#f8fafc; font-weight:bold;"></div>
+                </div>
+                <div class="form-row-3">
+                    <div class="field">
+                        <label>Comisión Canal (%)</label>
+                        <div style="display:flex; gap:5px;">
+                            <input type="number" name="comm_canal_pct" id="bk-comm-pct" step="0.1" value="15.0" style="width:70px;">
+                            <input type="number" name="fee_banco" id="bk-fee-canal" step="0.01" value="0" readonly style="background:#f1f5f9; flex:1;">
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label>Imp. Bancarios (%)</label>
+                        <div style="display:flex; gap:5px;">
+                            <input type="number" name="tax_banco_pct" id="bk-tax-pct" step="0.1" value="3.0" style="width:70px;">
+                            <input type="number" name="tax_banco_val" id="bk-tax-val" step="0.01" value="0" readonly style="background:#f1f5f9; flex:1;">
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label>Fee Admin (%)</label>
+                        <div style="display:flex; gap:5px;">
+                            <input type="number" name="fee_admin_pct" id="bk-fee-admin-pct" step="0.1" value="20.0" style="width:70px;">
+                            <input type="number" name="fee_admin" id="bk-fee-admin" step="0.01" value="0" readonly style="background:#f1f5f9; flex:1;">
+                        </div>
+                    </div>
                 </div> 
-                <button type="submit" class="btn-primary" style="width: 100%;">Guardar Reserva</button> 
+
+                <h3 style="font-size: 0.9rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; margin: 15px 0 10px;">Plan de Pagos (Huésped)</h3>
+                <div class="form-row-3">
+                    <div class="field">
+                        <label>Anticipo Pagado</label>
+                        <input type="number" name="advance_payment" step="0.01" value="0">
+                    </div>
+                    <div class="field">
+                        <label>Fecha Anticipo</label>
+                        <input type="date" name="advance_date">
+                    </div>
+                    <div class="field"></div>
+                </div>
+                <div class="form-row-3">
+                    <div class="field">
+                        <label>Saldo a Cobrar</label>
+                        <input type="number" name="balance_payment" step="0.01" value="0">
+                    </div>
+                    <div class="field">
+                        <label>Fecha Saldo</label>
+                        <input type="date" name="balance_date">
+                    </div>
+                    <div class="field"></div>
+                </div>
+
+                <button type="submit" class="btn-primary" style="width: 100%; margin-top:15px;">Guardar Reserva</button>
             </form> 
  
             <div class="tab-filter-row"> 

@@ -6,9 +6,9 @@ header("Content-Type: application/json");
 
 // TO DO: Replace with BlueHost DB credentials
 $host = "localhost";
-$db_name = "athcomar_keep_in_rent";
-$username = "athcomar_keep_in_rent_user";
-$password = "}yTLhuX[PiM$";
+$db_name = "madrid_rental_db";
+$username = "root";
+$password = "";
 
 try {
     $conn = new PDO("mysql:host=$host;dbname=$db_name;charset=utf8", $username, $password);
@@ -238,14 +238,29 @@ switch($action) {
         verifyPropertyOwnership($conn, $data['property_id'], $user_id);
 
         if(isset($data['id']) && $data['id']) {
-            $sql = "UPDATE bookings SET booking_ref=?, platform=?, origin=?, checkin=?, checkout=?, bruto=?, fee_banco=?, fee_thl=?, limpieza=?, net=?, nights=? WHERE id=? AND property_id=?";
+            $sql = "UPDATE bookings SET booking_ref=?, platform=?, origin=?, checkin=?, checkout=?, bruto=?, fee_banco=?, fee_admin=?, limpieza=?, net=?, nights=?, guest_name=?, guest_phone=?, guest_address=?, adults=?, children=?, comm_canal_pct=?, tax_banco_pct=?, fee_admin_pct=?, tax_banco_val=?, advance_payment=?, advance_date=?, balance_payment=?, balance_date=? WHERE id=? AND property_id=?";
             $stmt = $conn->prepare($sql);
-            $stmt->execute([$data['booking_ref'], $data['platform'], $data['origin'], $data['checkin'], $data['checkout'], $data['bruto'], $data['fee_banco'], $data['fee_thl'], $data['limpieza'], $data['net'], $data['nights'], $data['id'], $data['property_id']]);
+            $stmt->execute([
+                $data['booking_ref'], $data['platform'], $data['origin'], $data['checkin'], $data['checkout'],
+                $data['bruto'], $data['fee_banco'], $data['fee_admin'], $data['limpieza'], $data['net'], $data['nights'],
+                $data['guest_name'] ?? null, $data['guest_phone'] ?? null, $data['guest_address'] ?? null,
+                $data['adults'] ?? 1, $data['children'] ?? 0,
+                $data['comm_canal_pct'] ?? 15.0, $data['tax_banco_pct'] ?? 3.0, $data['fee_admin_pct'] ?? 20.0, $data['tax_banco_val'] ?? 0.0,
+                $data['advance_payment'] ?? 0.0, $data['advance_date'] ?: null, $data['balance_payment'] ?? 0.0, $data['balance_date'] ?: null,
+                $data['id'], $data['property_id']
+            ]);
             echo json_encode(["data" => array_merge($data, ["id" => $data['id']])]);
         } else {
-            $sql = "INSERT INTO bookings (property_id, booking_ref, platform, origin, checkin, checkout, bruto, fee_banco, fee_thl, limpieza, net, nights) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            $sql = "INSERT INTO bookings (property_id, booking_ref, platform, origin, checkin, checkout, bruto, fee_banco, fee_admin, limpieza, net, nights, guest_name, guest_phone, guest_address, adults, children, comm_canal_pct, tax_banco_pct, fee_admin_pct, tax_banco_val, advance_payment, advance_date, balance_payment, balance_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             $stmt = $conn->prepare($sql);
-            $stmt->execute([$data['property_id'], $data['booking_ref'], $data['platform'], $data['origin'], $data['checkin'], $data['checkout'], $data['bruto'], $data['fee_banco'], $data['fee_thl'], $data['limpieza'], $data['net'], $data['nights']]);
+            $stmt->execute([
+                $data['property_id'], $data['booking_ref'], $data['platform'], $data['origin'], $data['checkin'], $data['checkout'],
+                $data['bruto'], $data['fee_banco'], $data['fee_admin'], $data['limpieza'], $data['net'], $data['nights'],
+                $data['guest_name'] ?? null, $data['guest_phone'] ?? null, $data['guest_address'] ?? null,
+                $data['adults'] ?? 1, $data['children'] ?? 0,
+                $data['comm_canal_pct'] ?? 15.0, $data['tax_banco_pct'] ?? 3.0, $data['fee_admin_pct'] ?? 20.0, $data['tax_banco_val'] ?? 0.0,
+                $data['advance_payment'] ?? 0.0, $data['advance_date'] ?: null, $data['balance_payment'] ?? 0.0, $data['balance_date'] ?: null
+            ]);
             echo json_encode(["data" => array_merge($data, ["id" => $conn->lastInsertId()])]);
         }
         break;
@@ -375,10 +390,10 @@ switch($action) {
 
             // Insert Bookings
             if (isset($data['bookings']) && is_array($data['bookings'])) {
-                $sqlB = "INSERT INTO bookings (property_id, booking_ref, platform, origin, checkin, checkout, bruto, fee_banco, fee_thl, limpieza, net, nights) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                $sqlB = "INSERT INTO bookings (property_id, booking_ref, platform, origin, checkin, checkout, bruto, fee_banco, fee_admin, limpieza, net, nights) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                 $stmtB = $conn->prepare($sqlB);
                 foreach ($data['bookings'] as $b) {
-                    $stmtB->execute([$property_id, $b['booking_ref'], $b['platform'], $b['origin'], $b['checkin'], $b['checkout'], $b['bruto'], $b['fee_banco'], $b['fee_thl'], $b['limpieza'], $b['net'], $b['nights']]);
+                    $stmtB->execute([$property_id, $b['booking_ref'] ?? '', $b['platform'] ?? '', $b['origin'] ?? '', $b['checkin'], $b['checkout'], $b['bruto'], $b['fee_banco'] ?? 0, $b['fee_admin'] ?? 0, $b['limpieza'] ?? 0, $b['net'], $b['nights']]);
                 }
             }
 

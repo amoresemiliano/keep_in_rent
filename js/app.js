@@ -182,6 +182,8 @@ class AppState {
     // Super Admin methods
     async adminGetUsers() { return await this.apiCall('admin_get_users'); }
     async adminGetAllProperties() { return await this.apiCall('get_properties'); }
+    async adminGetLinks() { return await this.apiCall('admin_get_links'); }
+    async adminDeleteLink(linkId) { return await this.apiCall('admin_delete_link', 'POST', { link_id: linkId }); }
     async adminLinkProperty(propId, email) { return await this.apiCall('admin_link_property', 'POST', { property_id: propId, user_email: email }); }
     async adminUpdateGlobal(key, val) { return await this.apiCall('admin_update_settings', 'POST', { key, val }); }
     async adminDeleteProperty(propId) { return await this.apiCall('admin_delete_property', 'POST', { property_id: propId }); }
@@ -362,6 +364,7 @@ class UI {
             document.getElementById('conf-m2').value = c.m2 || '';
             document.getElementById('conf-floor').value = c.floor || '';
             document.getElementById('conf-elevator').value = c.elevator || 'si';
+            if (document.getElementById('conf-currency')) document.getElementById('conf-currency').value = c.currency || 'EUR';
 
             customFeatures = c.customFeatures || [];
             this.renderCustomFeatures();
@@ -414,8 +417,6 @@ class UI {
             }
 
             obj.nights = Math.round((new Date(obj.checkout) - new Date(obj.checkin)) / 86400000);
-            obj.net = parseFloat(obj.bruto) - parseFloat(obj.fee_banco||0) - parseFloat(obj.fee_thl||0) - parseFloat(obj.limpieza||0);
-
             if (!isNew) obj.id = obj.booking_id;
 
             await this.state.saveRecord('booking', obj);
@@ -423,6 +424,31 @@ class UI {
             this.renderAll();
             alert(isNew ? "Reserva guardada con éxito." : "Reserva actualizada con éxito.");
         };
+
+        const calcBookingFees = () => {
+            const b = parseFloat(document.getElementById('bk-bruto').value) || 0;
+            const l = parseFloat(document.getElementById('bk-limpieza').value) || 0;
+            const commP = parseFloat(document.getElementById('bk-comm-pct').value) || 0;
+            const taxP = parseFloat(document.getElementById('bk-tax-pct').value) || 0;
+            const adminP = parseFloat(document.getElementById('bk-fee-admin-pct').value) || 0;
+
+            const commV = (b * commP) / 100;
+            const taxV = (b * taxP) / 100;
+            const adminV = (b * adminP) / 100;
+
+            document.getElementById('bk-fee-canal').value = commV.toFixed(2);
+            document.getElementById('bk-tax-val').value = taxV.toFixed(2);
+            document.getElementById('bk-fee-admin').value = adminV.toFixed(2);
+
+            const net = b - commV - taxV - adminV - l;
+            document.getElementById('bk-net').value = net.toFixed(2);
+        };
+
+        const bkFields = ['bk-bruto', 'bk-limpieza', 'bk-comm-pct', 'bk-tax-pct', 'bk-fee-admin-pct'];
+        bkFields.forEach(f => {
+            const el = document.getElementById(f);
+            if(el) el.addEventListener('input', calcBookingFees);
+        });
 
         document.getElementById('form-expense').onsubmit = async (e) => {
             e.preventDefault();
@@ -464,6 +490,7 @@ class UI {
                 m2: document.getElementById('conf-m2').value,
                 floor: document.getElementById('conf-floor').value,
                 elevator: document.getElementById('conf-elevator').value,
+                currency: document.getElementById('conf-currency') ? document.getElementById('conf-currency').value : 'EUR',
                 customFeatures: customFeatures
             });
 
@@ -636,6 +663,7 @@ class UI {
                 try {
                     await this.state.adminLinkProperty(propId, email);
                     alert("Propiedad vinculada exitosamente al usuario.");
+                    document.getElementById('admin-user-email').value = '';
                     this.renderAdminPanel();
                 } catch(err) {
                     alert("Error: " + err.message);
@@ -790,13 +818,13 @@ class UI {
         const b = this.getFiltered('bookings', 'checkin', 'dashboard');
         const e = this.getFiltered('expenses', 'date', 'dashboard');
         const bruto = b.reduce((acc, x) => acc + parseFloat(x.bruto), 0);
-        const gestion = b.reduce((acc, x) => acc + parseFloat(x.fee_banco||0) + parseFloat(x.fee_thl||0) + parseFloat(x.limpieza||0), 0);
+        const gestion = b.reduce((acc, x) => acc + parseFloat(x.fee_banco||0) + parseFloat(x.fee_admin||0) + parseFloat(x.limpieza||0), 0);
         const prop = e.reduce((acc, x) => acc + parseFloat(x.amount), 0);
 
-        document.getElementById('dash-bruto').innerText = bruto.toFixed(2) + '€';
-        document.getElementById('dash-gestion').innerText = gestion.toFixed(2) + '€';
-        document.getElementById('dash-propiedad').innerText = prop.toFixed(2) + '€';
-        document.getElementById('dash-neto').innerText = (bruto - gestion - prop).toFixed(2) + '€';
+        document.getElementById('dash-bruto').innerText = this.fmtMoney(bruto);
+        document.getElementById('dash-gestion').innerText = this.fmtMoney(gestion);
+        document.getElementById('dash-propiedad').innerText = this.fmtMoney(prop);
+        document.getElementById('dash-neto').innerText = this.fmtMoney(bruto - gestion - prop);
         this.updateChart(b, e);
     }
 
@@ -810,7 +838,7 @@ class UI {
             dataSet.bruto[m] += parseFloat(x.bruto);
             dataSet.net[m] += parseFloat(x.net);
             dataSet.clean[m] += parseFloat(x.limpieza);
-            dataSet.fee[m] += parseFloat(x.fee_banco) + parseFloat(x.fee_thl);
+            dataSet.fee[m] += parseFloat(x.fee_banco) + parseFloat(x.fee_admin);
         });
 
         const chartType = document.getElementById('chart-type') ? document.getElementById('chart-type').value : 'bar';
@@ -839,8 +867,8 @@ class UI {
         b = this.sortData(b, 'bookings');
         document.getElementById('list-bookings-body').innerHTML = b.map(x => `
             <tr>
-                <td>${x.checkin}</td><td>${x.platform}</td><td>${x.origin}</td><td>${parseFloat(x.bruto).toFixed(2)}€</td>
-                <td class="text-success">${parseFloat(x.net).toFixed(2)}€</td>
+                <td>${x.checkin}</td><td>${x.platform}</td><td>${x.origin}</td><td>${this.fmtMoney(x.bruto)}</td>
+                <td class="text-success">${this.fmtMoney(x.net)}</td>
                 <td>
                     <button class="icon-btn" onclick="window.editB(${x.id})" title="Editar"><i class="fa fa-pencil text-accent"></i></button>
                     <button class="icon-btn" onclick="window.dupB(${x.id})" title="Duplicar"><i class="fa fa-copy text-success"></i></button>
@@ -856,7 +884,7 @@ class UI {
         e = this.sortData(e, 'expenses');
         document.getElementById('list-expenses-body').innerHTML = e.map(x => `
             <tr>
-                <td>${x.date}</td><td>${x.category}</td><td>${parseFloat(x.amount).toFixed(2)}€</td>
+                <td>${x.date}</td><td>${x.category}</td><td>${this.fmtMoney(x.amount)}</td>
                 <td>
                     <button class="icon-btn" onclick="window.editE(${x.id})" title="Editar"><i class="fa fa-pencil text-accent"></i></button>
                     <button class="icon-btn" onclick="window.dupE(${x.id})" title="Duplicar"><i class="fa fa-copy text-success"></i></button>
@@ -884,7 +912,7 @@ class UI {
             months[m].nights += parseFloat(x.nights);
             months[m].bruto += parseFloat(x.bruto);
             months[m].net += parseFloat(x.net);
-            months[m].comisiones += (parseFloat(x.fee_banco||0) + parseFloat(x.fee_thl||0));
+            months[m].comisiones += (parseFloat(x.fee_banco||0) + parseFloat(x.fee_admin||0));
         });
 
         e.forEach(x => {
@@ -896,7 +924,7 @@ class UI {
         const data = this.sortData(Object.values(months), 'analysis');
 
         document.getElementById('stats-table-body').innerHTML = data.map(x => `
-            <tr><td>${x.month}</td><td>${x.nights}</td><td>${x.bruto.toFixed(2)}€</td><td class="text-success">${x.net.toFixed(2)}€</td></tr>
+            <tr><td>${x.month}</td><td>${x.nights}</td><td>${this.fmtMoney(x.bruto)}</td><td class="text-success">${this.fmtMoney(x.net)}</td></tr>
         `).join('');
 
         const yearSelect = document.getElementById('matrix-year-select');
@@ -975,7 +1003,7 @@ class UI {
             cross[key] += py === 'count' ? 1 : parseFloat(x[py]);
         });
         document.getElementById('cross-analysis-body').innerHTML = Object.keys(cross).map(k => {
-            const displayVal = py === 'count' ? cross[k] : cross[k].toFixed(2) + '€';
+            const displayVal = py === 'count' ? cross[k] : this.fmtMoney(cross[k]);
             return `<tr><td><b>${k}</b></td><td>${displayVal}</td></tr>`;
         }).join('');
     }
@@ -1000,10 +1028,10 @@ class UI {
 
             return `
             <tr>
-                <td>${x.checkin} - ${x.platform} - ${parseFloat(x.bruto).toFixed(2)}€</td>
-                <td>${parseFloat(x.net).toFixed(2)}€</td>
+                <td>${x.checkin} - ${x.platform} - ${this.fmtMoney(x.bruto)}</td>
+                <td>${this.fmtMoney(x.net)}</td>
                 <td><input type="number" step="0.01" value="${rec.val}" onchange="window.upBank(${x.id}, 'val', this.value)"></td>
-                <td class="${colorClass}"><b>${diff.toFixed(2)}€</b></td>
+                <td class="${colorClass}"><b>${this.fmtMoney(diff)}</b></td>
                 <td><input type="text" value="${rec.obs}" onchange="window.upBank(${x.id}, 'obs', this.value)"></td>
             </tr>`;
         }).join('');
@@ -1040,6 +1068,20 @@ class UI {
 
             document.getElementById('admin-cat-input').value = this.state.globalExpenseCategories.join(', ');
             document.getElementById('admin-chan-input').value = this.state.globalPlatforms.join(', ');
+
+            const linksReq = await this.state.adminGetLinks();
+            const links = Array.isArray(linksReq) ? linksReq : (linksReq.links || []);
+            const linksTbody = document.getElementById('admin-links-body');
+            if(linksTbody) {
+                linksTbody.innerHTML = links.map(l => `
+                    <tr>
+                        <td>${l.property_id}</td>
+                        <td>${l.calle}, ${l.ciudad}</td>
+                        <td>${l.email}</td>
+                        <td><button class="icon-btn text-danger" onclick="window.delLink(${l.link_id})" title="Eliminar Vínculo"><i class="fa fa-unlink"></i></button></td>
+                    </tr>
+                `).join('');
+            }
 
         } catch (e) {
             console.error("Error loading admin data", e);
@@ -1142,6 +1184,15 @@ class UI {
         return arr;
     }
 
+
+    fmtMoney(val) {
+        const c = this.state.config?.currency || 'EUR';
+        const num = parseFloat(val).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (c === 'USD') return `$${num}`;
+        if (c === 'ARS') return `AR$${num}`;
+        return `${num}€`;
+    }
+
     sortData(arr, type) {
         const s = this.sorts[type];
         return arr.sort((a,b) => a[s.k] > b[s.k] ? (1 * s.d) : (-1 * s.d));
@@ -1193,5 +1244,12 @@ window.delUser = async (id) => {
     if(confirm("¿Eliminar usuario y todas sus propiedades asociadas permanentemente?")) {
         await app.state.adminDeleteUser(id);
         app.renderAll();
+    }
+};
+
+window.delLink = async (id) => {
+    if(confirm("¿Quitar acceso de este usuario a la propiedad?")) {
+        await app.state.adminDeleteLink(id);
+        app.renderAdminPanel();
     }
 };
