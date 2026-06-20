@@ -80,7 +80,7 @@ class AppState {
                 this.properties = [];
             } else {
                 this.properties = Array.isArray(propsData) ? propsData.map(p => {
-                    return { ...p, name: p.calle ? `${p.calle}, ${p.ciudad}` : `Propiedad #${p.id}` };
+                    return { ...p, name: p.alias ? p.alias : (p.calle ? `${p.calle}, ${p.ciudad}` : `Propiedad #${p.id}`) };
                 }) : [];
             }
 
@@ -291,6 +291,7 @@ class UI {
         pSel.onchange = (e) => this.handlePropertyChange(e.target.value);
 
         document.getElementById('btn-add-property').onclick = () => {
+            this.state.currentActiveId = null; // Prevent overwriting
             const sm = document.getElementById('setup-modal');
             document.getElementById('form-setup').reset();
             document.getElementById('custom-features-container').innerHTML = '';
@@ -353,6 +354,7 @@ class UI {
             const sm = document.getElementById('setup-modal');
             const c = this.state.config;
             document.getElementById('conf-name').value = c.name || '';
+            document.getElementById('conf-alias').value = c.alias || '';
             document.getElementById('conf-calle').value = c.calle || '';
             document.getElementById('conf-ciudad').value = c.ciudad || '';
             document.getElementById('conf-cp').value = c.cp || '';
@@ -884,7 +886,7 @@ class UI {
         e = this.sortData(e, 'expenses');
         document.getElementById('list-expenses-body').innerHTML = e.map(x => `
             <tr>
-                <td>${x.date}</td><td>${x.category}</td><td>${this.fmtMoney(x.amount)}</td>
+                <td>${x.date}</td><td>${x.category}<br><small class="text-light" style="color:#94a3b8">${x.supplier || ''}</small></td><td>${this.fmtMoney(x.amount)}</td>
                 <td>
                     <button class="icon-btn" onclick="window.editE(${x.id})" title="Editar"><i class="fa fa-pencil text-accent"></i></button>
                     <button class="icon-btn" onclick="window.dupE(${x.id})" title="Duplicar"><i class="fa fa-copy text-success"></i></button>
@@ -1066,8 +1068,20 @@ class UI {
                 `).join('');
             }
 
-            document.getElementById('admin-cat-input').value = this.state.globalExpenseCategories.join(', ');
-            document.getElementById('admin-chan-input').value = this.state.globalPlatforms.join(', ');
+
+            const renderList = (id, items, type) => {
+                const el = document.getElementById(id);
+                if(!el) return;
+                el.innerHTML = items.map((item, idx) => `
+                    <li style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid #e2e8f0;">
+                        <span>${item}</span>
+                        <button class="icon-btn text-danger" onclick="window.delGlobal('${type}', ${idx})" style="padding:2px;"><i class="fa fa-trash"></i></button>
+                    </li>
+                `).join('');
+            };
+            renderList('admin-cat-list', this.state.globalExpenseCategories, 'cat');
+            renderList('admin-chan-list', this.state.globalPlatforms, 'chan');
+
 
             const linksReq = await this.state.adminGetLinks();
             const links = Array.isArray(linksReq) ? linksReq : (linksReq.links || []);
@@ -1136,23 +1150,39 @@ class UI {
 
             statusBox.innerHTML = `Análisis completado para <b>${c.ciudad}</b>. Datos simulados en tiempo real.`;
 
-            this.initMapMock(c.ciudad);
+            this.initMapMock(c.ciudad, c.calle);
 
         }, 1500);
     }
 
-    initMapMock(ciudad) {
+    async initMapMock(ciudad, calle) {
         if(this.marketMap) {
             this.marketMap.remove();
+            this.marketMap = null;
+            document.getElementById('map').innerHTML = ""; // clean dom
         }
 
         let lat = 40.4168;
         let lng = -3.7038;
 
-        if(ciudad.toLowerCase().includes('valencia')) { lat = 39.4699; lng = -0.3763; }
-        else if(ciudad.toLowerCase().includes('barcelona')) { lat = 41.3851; lng = 2.1734; }
-        else if(ciudad.toLowerCase().includes('sevilla')) { lat = 37.3891; lng = -5.9845; }
-        else if(ciudad.toLowerCase().includes('malaga')) { lat = 36.7213; lng = -4.4213; }
+        // Use free nominatim API to fetch real coordinates based on city and street
+        try {
+            const query = encodeURIComponent(`${calle}, ${ciudad}`);
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`);
+            const data = await res.json();
+            if(data && data.length > 0) {
+                lat = parseFloat(data[0].lat);
+                lng = parseFloat(data[0].lon);
+            } else {
+                // Fallback to just city
+                const resC = await fetch(`https://nominatim.openstreetmap.org/search?city=${encodeURIComponent(ciudad)}&format=json&limit=1`);
+                const dataC = await resC.json();
+                if(dataC && dataC.length > 0) {
+                    lat = parseFloat(dataC[0].lat);
+                    lng = parseFloat(dataC[0].lon);
+                }
+            }
+        } catch(e) { console.log("Geocoding failed, using default"); }
 
         this.marketMap = L.map('map').setView([lat, lng], 14);
 
@@ -1251,5 +1281,26 @@ window.delLink = async (id) => {
     if(confirm("¿Quitar acceso de este usuario a la propiedad?")) {
         await app.state.adminDeleteLink(id);
         app.renderAdminPanel();
+    }
+};
+
+window.delGlobal = async (type, idx) => {
+    if(confirm("¿Eliminar este elemento global?")) {
+        try {
+            let newArr = [];
+            let key = '';
+            if(type === 'cat') {
+                newArr = [...app.state.globalExpenseCategories];
+                newArr.splice(idx, 1);
+                key = 'expense_categories';
+            } else {
+                newArr = [...app.state.globalPlatforms];
+                newArr.splice(idx, 1);
+                key = 'booking_platforms';
+            }
+            await app.state.adminUpdateGlobal(key, newArr.join(','));
+            await app.state.loadGlobalSettings();
+            app.renderAdminPanel();
+        } catch(e) { alert("Error: " + e.message); }
     }
 };

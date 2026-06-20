@@ -134,10 +134,10 @@
                         <div style="flex:1;"><label style="font-size:0.75rem;font-weight:700;">Adultos</label><input type="number" name="adults" min="1" value="1" style="width:100%;"></div>
                         <div style="flex:1;"><label style="font-size:0.75rem;font-weight:700;">Niños</label><input type="number" name="children" min="0" value="0" style="width:100%;"></div>
                     </div>
-                </div> 
+                </div>
 
                 <h3 style="font-size: 0.9rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; margin: 15px 0 10px;">Económicos</h3>
-                <div class="form-row-3"> 
+                <div class="form-row-3">
                     <div class="field"><label>Bruto Total</label><input type="number" name="bruto" id="bk-bruto" step="0.01" required></div>
                     <div class="field"><label>Limpieza</label><input type="number" name="limpieza" id="bk-limpieza" step="0.01" value="0"></div>
                     <div class="field"><label>Neto Propietario</label><input type="number" name="net" id="bk-net" step="0.01" readonly style="background:#f8fafc; font-weight:bold;"></div>
@@ -167,27 +167,23 @@
                 </div> 
 
                 <h3 style="font-size: 0.9rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; margin: 15px 0 10px;">Plan de Pagos (Huésped)</h3>
-                <div class="form-row-3">
-                    <div class="field">
-                        <label>Anticipo Pagado</label>
+                <div style="display:flex; flex-wrap:wrap; gap:15px; align-items:flex-end;">
+                    <div class="field" style="flex:1; min-width:120px;">
+                        <label>Anticipo</label>
                         <input type="number" name="advance_payment" step="0.01" value="0">
                     </div>
-                    <div class="field">
-                        <label>Fecha Anticipo</label>
+                    <div class="field" style="flex:1; min-width:120px;">
+                        <label>Fecha Ant.</label>
                         <input type="date" name="advance_date">
                     </div>
-                    <div class="field"></div>
-                </div>
-                <div class="form-row-3">
-                    <div class="field">
-                        <label>Saldo a Cobrar</label>
+                    <div class="field" style="flex:1; min-width:120px;">
+                        <label>Saldo</label>
                         <input type="number" name="balance_payment" step="0.01" value="0">
                     </div>
-                    <div class="field">
+                    <div class="field" style="flex:1; min-width:120px;">
                         <label>Fecha Saldo</label>
                         <input type="date" name="balance_date">
                     </div>
-                    <div class="field"></div>
                 </div>
 
                 <button type="submit" class="btn-primary" style="width: 100%; margin-top:15px;">Guardar Reserva</button>

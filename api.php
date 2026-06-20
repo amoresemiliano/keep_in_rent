@@ -169,7 +169,7 @@ switch($action) {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         $stmt = $conn->prepare($sql);
         $stmt->execute([
-            $user_id, $data['calle'], $data['cp'], $data['ciudad'], $data['pais'],
+            $user_id, $data['alias'] ?? null, $data['alias'] ?? null, $data['calle'], $data['cp'], $data['ciudad'], $data['pais'],
             $data['m2'] ?: null, $data['habitaciones'] ?: null, $data['banos'] ?: null, $data['capacidad'] ?: null,
             $data['piscina'], $data['cochera'], $data['balcon'], $data['ascensor'], json_encode($data['custom_features'])
         ]);
@@ -184,7 +184,7 @@ switch($action) {
         $sql = "UPDATE properties SET calle=?, cp=?, ciudad=?, pais=?, m2=?, habitaciones=?, banos=?, capacidad=?, piscina=?, cochera=?, balcon=?, ascensor=?, custom_features=? WHERE id=?";
         $stmt = $conn->prepare($sql);
         $stmt->execute([
-            $data['calle'], $data['cp'], $data['ciudad'], $data['pais'],
+            $data['alias'] ?? null, $data['calle'], $data['cp'], $data['ciudad'], $data['pais'],
             $data['m2'] ?: null, $data['habitaciones'] ?: null, $data['banos'] ?: null, $data['capacidad'] ?: null,
             $data['piscina'], $data['cochera'], $data['balcon'], $data['ascensor'], json_encode($data['custom_features']),
             $property_id
@@ -212,6 +212,7 @@ switch($action) {
         // Map DB columns back to config object expected by frontend
         $config = [];
         if ($prop) {
+            $config['alias'] = $prop['alias'];
             $config['calle'] = $prop['calle'];
             $config['ciudad'] = $prop['ciudad'];
             $config['cp'] = $prop['cp'];
@@ -246,7 +247,7 @@ switch($action) {
                 $data['guest_name'] ?? null, $data['guest_phone'] ?? null, $data['guest_address'] ?? null,
                 $data['adults'] ?? 1, $data['children'] ?? 0,
                 $data['comm_canal_pct'] ?? 15.0, $data['tax_banco_pct'] ?? 3.0, $data['fee_admin_pct'] ?? 20.0, $data['tax_banco_val'] ?? 0.0,
-                $data['advance_payment'] ?? 0.0, $data['advance_date'] ?: null, $data['balance_payment'] ?? 0.0, $data['balance_date'] ?: null,
+                $data['advance_payment'] ?? 0.0, empty($data['advance_date']) ? null : $data['advance_date'], $data['balance_payment'] ?? 0.0, empty($data['balance_date']) ? null : $data['balance_date'],
                 $data['id'], $data['property_id']
             ]);
             echo json_encode(["data" => array_merge($data, ["id" => $data['id']])]);
@@ -335,14 +336,14 @@ switch($action) {
         verifyPropertyOwnership($conn, $data['property_id'], $user_id);
 
         if(isset($data['id']) && $data['id']) {
-            $sql = "UPDATE expenses SET date=?, category=?, amount=?, observations=? WHERE id=? AND property_id=?";
+            $sql = "UPDATE expenses SET date=?, category=?, supplier=?, amount=?, observations=? WHERE id=? AND property_id=?";
             $stmt = $conn->prepare($sql);
-            $stmt->execute([$data['date'], $data['category'], $data['amount'], $data['observations'], $data['id'], $data['property_id']]);
+            $stmt->execute([$data['date'], $data['category'], $data['supplier'] ?? null, $data['amount'], $data['observations'], $data['id'], $data['property_id']]);
             echo json_encode(["data" => array_merge($data, ["id" => $data['id']])]);
         } else {
-            $sql = "INSERT INTO expenses (property_id, date, category, amount, observations) VALUES (?, ?, ?, ?, ?)";
+            $sql = "INSERT INTO expenses (property_id, date, category, supplier, amount, observations) VALUES (?, ?, ?, ?, ?, ?)";
             $stmt = $conn->prepare($sql);
-            $stmt->execute([$data['property_id'], $data['date'], $data['category'], $data['amount'], $data['observations']]);
+            $stmt->execute([$data['property_id'], $data['date'], $data['category'], $data['supplier'] ?? null, $data['amount'], $data['observations']]);
             echo json_encode(["data" => array_merge($data, ["id" => $conn->lastInsertId()])]);
         }
         break;
@@ -399,10 +400,10 @@ switch($action) {
 
             // Insert Expenses
             if (isset($data['expenses']) && is_array($data['expenses'])) {
-                $sqlE = "INSERT INTO expenses (property_id, date, category, amount, observations) VALUES (?, ?, ?, ?, ?)";
+                $sqlE = "INSERT INTO expenses (property_id, date, category, supplier, amount, observations) VALUES (?, ?, ?, ?, ?, ?)";
                 $stmtE = $conn->prepare($sqlE);
                 foreach ($data['expenses'] as $e) {
-                    $stmtE->execute([$property_id, $e['date'], $e['category'], $e['amount'], $e['observations']]);
+                    $stmtE->execute([$property_id, $e['date'], $e['category'], $e['supplier'] ?? null, $e['amount'], $e['observations']]);
                 }
             }
 
