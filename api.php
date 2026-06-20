@@ -5,10 +5,11 @@ header("Access-Control-Allow-Headers: Content-Type, Authorization");
 header("Content-Type: application/json");
 
 // TO DO: Replace with BlueHost DB credentials
+// TO DO: Replace with BlueHost DB credentials
 $host = "localhost";
-$db_name = "madrid_rental_db";
-$username = "root";
-$password = "";
+$db_name = "athcomar_keep_in_rent";
+$username = "athcomar_keep_in_rent_user";
+$password = "}yTLhuX[PiM$";
 
 try {
     $conn = new PDO("mysql:host=$host;dbname=$db_name;charset=utf8", $username, $password);
