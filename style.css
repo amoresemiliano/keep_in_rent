@@ -321,10 +321,3 @@ input, select {
         width: 100%;
     }
 }
-
-/* Make fields mobile friendly */
-@media (max-width: 600px) {
-    .form-row-3 {
-        grid-template-columns: 1fr;
-    }
-}
